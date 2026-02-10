@@ -71,7 +71,8 @@
       {
         "provider": "github",
         "owner": "chahongroom-nowon",
-        "repo": "ch_month"
+        "repo": "ch_month",
+        "releaseType": "release" 
       }
     ]
   }
