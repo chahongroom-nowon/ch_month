@@ -45,26 +45,33 @@ function App() {
       // 1. 일반 알림
       ipcRenderer.on('update-msg', (e, p) => setModalState({ type: 'INFO', text: p.text, version: '', percent: 0 }));
 
-      // 2. ★★★ [수정됨] 업데이트 발견 시 -> 묻지도 따지지도 않고 바로 다운로드 시작! ★★★
+      // 2. 업데이트 발견 시 -> 자동 다운로드 시작
       ipcRenderer.on('update-available', (e, v) => {
-          // 모달 상태를 바로 PROGRESS로 변경
           setModalState({ type: 'PROGRESS', text: '', version: v, percent: 0 });
-          // 다운로드 강제 시작
           ipcRenderer.invoke('start-download');
       });
 
-      // 3. 다운로드 진행률 업데이트
+      // 3. ★★★ [추가됨] 최신 버전일 경우 알림 ★★★
+      ipcRenderer.on('update-not-available', () => {
+          addLog('✅ 현재 최신 버전입니다.');
+      });
+
+      // 4. 다운로드 진행률
       ipcRenderer.on('download-progress', (e, p) => setModalState(prev => ({ ...prev, type: 'PROGRESS', percent: Math.round(p) })));
 
-      // 4. 다운로드 완료 (설치 대기)
+      // 5. 다운로드 완료
       ipcRenderer.on('download-complete', () => setModalState({ type: 'INSTALL', text: '', version: '', percent: 100 }));
       
-      // 앱 켜지면 1.5초 뒤 업데이트 체크 시작
-      setTimeout(() => ipcRenderer.invoke('check-for-updates'), 1500);
+      // 앱 시작 1.5초 후 업데이트 체크
+      setTimeout(() => {
+          addLog('🔄 업데이트 확인 중...');
+          ipcRenderer.invoke('check-for-updates');
+      }, 1500);
 
       return () => { 
           ipcRenderer.removeAllListeners('update-msg'); 
           ipcRenderer.removeAllListeners('update-available'); 
+          ipcRenderer.removeAllListeners('update-not-available'); // 리스너 해제 추가
           ipcRenderer.removeAllListeners('download-progress'); 
           ipcRenderer.removeAllListeners('download-complete'); 
       };
@@ -77,9 +84,7 @@ function App() {
   const handleReopenReport = () => { setShowVerify(true); window.resizeTo(1400, 900); };
   const closeModal = () => setModalState({ ...modalState, type: 'NONE' });
   
-  // 수동 업데이트 버튼 등에서 사용할 수 있으므로 남겨둠 (자동 로직에선 사용 안 함)
   const handleStartDownload = () => { setModalState(prev => ({ ...prev, type: 'PROGRESS', percent: 0 })); ipcRenderer.invoke('start-download'); };
-  
   const handleInstall = () => ipcRenderer.invoke('install-now');
   
   const removeStaff = (i) => { const l = staffList.filter((_, idx) => idx !== i); setStaffList(l); localStorage.setItem('staffList', JSON.stringify(l)); };
@@ -314,15 +319,12 @@ function App() {
         <div className="modal-overlay">
           <div className="modal-content">
              {modalState.type === 'INFO' && <><h3>🔔 알림</h3><p>{modalState.text}</p><button className="modal-btn primary" onClick={closeModal}>확인</button></>}
-             
-             {/* ★★★ [수정됨] CONFIRM 제거, PROGRESS에 자동 업데이트 문구 추가 ★★★ */}
              {modalState.type === 'PROGRESS' && <>
                  <h3>자동 업데이트 진행 중...</h3>
                  <p className="modal-desc" style={{marginBottom:'15px', color:'#4b5563'}}>새 버전({modalState.version})을 발견하여<br/>자동으로 다운로드하고 있습니다.</p>
                  <div className="progress-bar-bg"><div className="progress-bar-fill" style={{ width: `${modalState.percent}%` }}></div></div>
                  <p className="progress-text">{modalState.percent}%</p>
              </>}
-
              {modalState.type === 'INSTALL' && <><h3>✅ 준비 완료</h3><p className="modal-desc">업데이트 설치를 위해 재시작합니다.</p><div className="modal-btn-row"><button className="modal-btn primary" onClick={handleInstall}>지금 재시작</button><button className="modal-btn secondary" onClick={closeModal}>나중에</button></div></>}
           </div>
         </div>
