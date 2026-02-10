@@ -1,0 +1,78 @@
+{
+  "name": "handsos-manager",
+  "private": true,
+  "version": "1.2.9",
+  "description": "HandSOS Sales Manager",
+  "main": "electron/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chahongroom-nowon/ch_month.git"
+  },
+  "scripts": {
+    "start": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "build": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7",
+    "exceljs": "^4.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.55.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "vite": "^5.0.8",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.chahong.closing",
+    "productName": "마감 프로그램",
+    "artifactName": "ClosingProgram-Setup-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "compression": "maximum",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon2.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": true,
+      "shortcutName": "마감 프로그램"
+    },
+    "extraResources": [
+      {
+        "from": "public/template.xlsx",
+        "to": "template.xlsx"
+      },
+      {
+        "from": "public/daily_template.xlsx",
+        "to": "daily_template.xlsx"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "chahongroom-nowon",
+        "repo": "ch_month"
+      }
+    ]
+  }
+}

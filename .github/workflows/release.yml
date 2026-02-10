@@ -1,0 +1,36 @@
+name: Build & Release
+
+# 'v'로 시작하는 태그(예: v1.2.9)가 푸시되면 이 작업이 실행됩니다.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out git repository
+        uses: actions/checkout@v3
+
+      # 님 프로젝트가 최신 Node 버전을 쓰니 20버전으로 맞춥니다.
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      # 의존성 패키지 설치
+      - name: Install Dependencies
+        run: npm install
+
+      # 빌드 및 배포 실행
+      # --publish always 옵션을 붙여서 빌드 후 깃허브에 바로 업로드하게 합니다.
+      - name: Build & Publish
+        run: npm run build -- --publish always
+        env:
+          # 아까 발급받아서 깃허브 Secrets에 등록한 토큰 이름이어야 합니다.
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}

@@ -1,0 +1,451 @@
+/* 기본 설정 */
+:root {
+  --primary-color: #2563eb;
+  --bg-color: #f8f9fa;
+  --border-color: #e5e7eb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: #333;
+  overflow: hidden; /* 스크롤바 숨김 */
+}
+
+/* 메인 컨테이너 (여백 없이 꽉 차게) */
+.container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background: white;
+}
+
+/* --- [왼쪽 패널] --- */
+.left-panel {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-right: 1px solid var(--border-color);
+  padding: 30px;
+  height: 100%;
+  overflow-y: auto;
+  transition: width 0.3s ease, flex 0.3s ease; /* 부드러운 전환 */
+  position: relative;
+  z-index: 10;
+}
+
+/* 타이틀 */
+.title-area { margin-bottom: 30px; }
+.title-area h1 { font-size: 24px; font-weight: 800; margin: 0; color: #111; letter-spacing: -0.5px; }
+.version-tag {
+  display: inline-block; background: #f1f3f5; color: #868e96;
+  font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-top: 5px; font-weight: 600;
+}
+
+/* 섹션 스타일 */
+.section-card { margin-bottom: 30px; }
+.section-title {
+  font-size: 13px; font-weight: 700; color: #2563eb;
+  margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+
+/* 버튼 */
+.btn-row { display: flex; gap: 10px; }
+.big-btn {
+  flex: 1; padding: 14px; border: none; border-radius: 10px;
+  color: white; font-weight: 700; font-size: 15px; cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08); transition: all 0.2s;
+}
+.big-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); }
+.big-btn:active { transform: translateY(0); }
+.big-btn:disabled { background: #ced4da !important; cursor: not-allowed; box-shadow: none; }
+
+/* 탭 */
+.tab-group {
+  display: flex; background: #f1f3f5; padding: 4px; border-radius: 10px; margin-bottom: 20px;
+}
+.tab-btn {
+  flex: 1; padding: 10px; border: none; background: transparent;
+  color: #868e96; font-weight: 600; font-size: 14px; border-radius: 8px; cursor: pointer;
+}
+.tab-btn.active { background: white; color: #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+
+/* 날짜 */
+.date-control { display: flex; flex-direction: column; gap: 10px; }
+.date-btn-group { display: flex; gap: 8px; }
+.sub-btn {
+  flex: 1; padding: 10px; border: 1px solid #dee2e6; background: white;
+  border-radius: 8px; font-size: 13px; cursor: pointer; color: #495057; transition: background 0.2s;
+}
+.sub-btn:hover { background: #f8f9fa; }
+.main-date-input {
+  width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 10px;
+  text-align: center; font-size: 16px; font-weight: 600; color: #333; font-family: inherit;
+}
+
+/* 안내 박스 */
+.info-box {
+  margin-top: 20px; background: #eff6ff; border: 1px solid #dbeafe;
+  border-radius: 10px; padding: 25px; text-align: center; color: #1e40af;
+}
+.info-icon { font-size: 24px; margin-bottom: 8px; display: block; }
+.info-text { font-size: 14px; line-height: 1.5; }
+
+/* 상태바 */
+.status-bar {
+  margin-top: auto; padding-top: 20px; border-top: 1px solid #f1f3f5;
+  font-size: 12px; color: #adb5bd; display: flex; align-items: center; gap: 8px;
+}
+.status-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; }
+
+/* --- [오른쪽 패널] --- */
+.right-panel {
+  flex: 1; /* 남은 공간 모두 차지 */
+  background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  box-shadow: inset 5px 0 10px -5px rgba(0,0,0,0.05); /* 경계선 음영 */
+}
+
+.panel-header {
+  padding: 20px 30px; background: white; border-bottom: 1px solid #e5e7eb;
+  display: flex; justify-content: space-between; align-items: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02); z-index: 5;
+}
+.panel-title { font-size: 18px; font-weight: 800; color: #333; }
+.close-btn {
+  background: #f1f3f5; border: none; padding: 8px 14px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; color: #495057; cursor: pointer; transition: background 0.2s;
+}
+.close-btn:hover { background: #e9ecef; }
+
+/* 리스트 컨테이너 */
+.list-container { flex: 1; overflow-y: auto; padding: 30px; }
+
+/* 요약 카드 (Grand Total) */
+.summary-card {
+  background: white; border-radius: 12px; border: 1px solid #e5e7eb;
+  padding: 20px; margin-bottom: 25px; display: flex; justify-content: space-around;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+.sum-item { text-align: center; }
+.sum-label { font-size: 12px; color: #868e96; margin-bottom: 5px; font-weight: 600; }
+.sum-value { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+.sum-value.green { color: #059669; }
+.sum-value.red { color: #dc2626; }
+.sum-value.blue { color: #2563eb; }
+.divider { width: 1px; background: #e5e7eb; height: 40px; align-self: center; }
+
+/* 그리드 */
+.grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+
+/* 직원 카드 */
+.staff-card {
+  background: white; border: 1px solid #e5e7eb; border-radius: 12px;
+  padding: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); transition: transform 0.2s;
+}
+.staff-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
+.staff-card.error { border: 2px solid #fca5a5; background: #fff5f5; }
+
+.card-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding-bottom: 12px; border-bottom: 2px solid #f1f3f5; margin-bottom: 12px;
+}
+.staff-name { font-size: 17px; font-weight: 800; color: #343a40; }
+.badge {
+  font-size: 11px; padding: 4px 8px; border-radius: 12px; font-weight: 700; color: white;
+  margin-top: 6px; display: inline-block;
+}
+.badge.match { background: #10b981; }
+.badge.mismatch { background: #ef4444; }
+
+.header-amounts { text-align: right; font-size: 12px; font-weight: 700; color: #495057; display: flex; flex-direction: column; gap: 3px; }
+
+/* 고객 행 */
+.customer-row {
+  background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px;
+  padding: 10px; margin-bottom: 8px; font-size: 12px;
+}
+.customer-row.match { background: #f0fdf4; border-color: #bbf7d0; }
+.customer-row.mismatch { background: #fef2f2; border-color: #fecaca; }
+
+.row-top { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px; color: #212529; }
+.row-detail { display: flex; justify-content: space-between; color: #868e96; }
+.row-detail.nb { color: #059669; border-top: 1px dashed #ced4da; margin-top: 4px; padding-top: 4px; }
+
+/* 모달 */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);
+  display: flex; justify-content: center; align-items: center; z-index: 1000;
+}
+.modal-content {
+  background: white; padding: 30px; border-radius: 16px; width: 320px; text-align: center;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+.modal-btn-row { margin-top: 25px; display: flex; justify-content: center; gap: 12px; }
+.modal-btn { padding: 10px 20px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+.modal-btn.primary { background: #2563eb; color: white; }
+.modal-btn.secondary { background: #f1f3f5; color: #495057; }
+
+/* --- 기존 CSS 유지 --- */
+
+/* ... (위쪽 코드는 그대로 두세요) ... */
+
+/* 안내 박스 (기본) */
+.info-box {
+  margin-top: 20px; background: #eff6ff; border: 1px solid #dbeafe;
+  border-radius: 10px; padding: 25px; text-align: center; color: #1e40af;
+  transition: all 0.2s;
+}
+.info-icon { font-size: 24px; margin-bottom: 8px; display: block; }
+.info-text { font-size: 14px; line-height: 1.5; }
+
+/* ★★★ [신규] 클릭 가능한 안내 박스 (버튼 역할) ★★★ */
+.info-box.clickable {
+  cursor: pointer;
+  background: white;
+  border: 2px dashed #2563eb;
+  color: #2563eb;
+  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.1);
+}
+.info-box.clickable:hover {
+  background: #eff6ff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(37, 99, 235, 0.15);
+}
+.info-box.clickable .info-icon {
+  font-size: 28px;
+}
+
+/* ... (아래쪽 코드도 그대로 두세요) ... */
+
+/* --- [추가] 직원 관리 스타일 --- */
+.staff-management-area {
+  margin-top: 10px;
+}
+
+.staff-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.staff-input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.add-btn {
+  padding: 10px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.add-btn:hover { opacity: 0.9; }
+
+.staff-list {
+  max-height: 350px;
+  overflow-y: auto;
+  border: 1px solid #f1f3f5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.staff-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  border-bottom: 1px solid #f1f3f5;
+  font-size: 14px;
+  color: #333;
+}
+.staff-item:last-child { border-bottom: none; }
+
+.del-btn {
+  padding: 4px 8px;
+  background: #ffe3e3;
+  color: #e03131;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.del-btn:hover { background: #ffc9c9; }
+
+/* --- [신규] 직원 불러오기 모달 스타일 --- */
+.staff-modal-content {
+  background: white;
+  padding: 25px;
+  border-radius: 16px;
+  width: 400px; /* 기존 모달보다 조금 더 넓게 */
+  text-align: left; /* 리스트는 좌측 정렬 */
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh; /* 화면 넘어가지 않게 */
+}
+
+.staff-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.staff-modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111;
+}
+
+.staff-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f9fafb;
+  margin-bottom: 20px;
+}
+
+.staff-checkbox-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.staff-checkbox-item:hover {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+.staff-checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.staff-info-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.staff-code-text {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-left: 5px;
+  font-weight: normal;
+}
+
+/* 동기화 버튼 */
+.sync-btn {
+  width: 100%;
+  padding: 14px;
+  background: #4b5563; /* 진한 회색 */
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  transition: background 0.2s;
+}
+.sync-btn:hover { background: #374151; }
+.sync-btn:disabled { background: #d1d5db; cursor: not-allowed; }
+
+/* ... (기존 title-area 스타일 아래에 추가) ... */
+
+.title-area {
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* 중앙 정렬 */
+}
+
+/* ★★★ [신규] 매장명 뱃지 스타일 ★★★ */
+.store-badge {
+  margin-top: 10px;
+  background: #e0e7ff; /* 연한 남색 배경 */
+  color: #3730a3;      /* 진한 남색 글씨 */
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ... (기존 CSS) ... */
+
+/* 매장명 뱃지 공통 스타일 */
+.store-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  animation: fadeIn 0.5s ease-in-out;
+  width: fit-content; /* 내용물만큼만 너비 차지 */
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- [신규] 제작자 푸터 스타일 --- */
+.maker-footer {
+  margin-top: 10px;       /* 상태바와의 간격 */
+  padding-top: 10px;      /* 내부 여백 */
+  border-top: 1px dashed #e5e7eb; /* 은은한 점선 구분선 */
+  text-align: center;     /* 가운데 정렬 */
+  font-size: 11px;        /* 작고 세련된 폰트 크기 */
+  color: #9ca3af;         /* 연한 회색 (눈에 띄지 않게) */
+  font-family: monospace; /* 개발자 느낌 나는 폰트 */
+}
+
+.maker-footer strong {
+  color: #6b7280;         /* 이름은 조금 더 진하게 */
+  font-weight: 700;
+}
