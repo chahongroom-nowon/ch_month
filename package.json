@@ -1,7 +1,7 @@
 {
   "name": "handsos-manager",
   "private": true,
-  "version": "1.2.9",
+  "version": "1.3.1",
   "description": "HandSOS Sales Manager",
   "main": "electron/main.js",
   "repository": {
@@ -72,7 +72,7 @@
         "provider": "github",
         "owner": "chahongroom-nowon",
         "repo": "ch_month",
-        "releaseType": "release" 
+        "releaseType": "release"
       }
     ]
   }
