@@ -42,17 +42,27 @@ function App() {
       ipcRenderer.invoke('get-app-version').then(ver => setAppVersion(ver));
       window.resizeTo(600, 800);
 
+      // 1. 일반 알림
       ipcRenderer.on('update-msg', (e, p) => setModalState({ type: 'INFO', text: p.text, version: '', percent: 0 }));
+
+      // 2. 업데이트 발견 시 -> 자동 다운로드 시작
       ipcRenderer.on('update-available', (e, v) => {
           setModalState({ type: 'PROGRESS', text: '', version: v, percent: 0 });
           ipcRenderer.invoke('start-download');
       });
+
+      // 3. ★★★ [추가됨] 최신 버전일 경우 알림 ★★★
       ipcRenderer.on('update-not-available', () => {
           addLog('✅ 현재 최신 버전입니다.');
       });
+
+      // 4. 다운로드 진행률
       ipcRenderer.on('download-progress', (e, p) => setModalState(prev => ({ ...prev, type: 'PROGRESS', percent: Math.round(p) })));
+
+      // 5. 다운로드 완료
       ipcRenderer.on('download-complete', () => setModalState({ type: 'INSTALL', text: '', version: '', percent: 100 }));
       
+      // 앱 시작 1.5초 후 업데이트 체크
       setTimeout(() => {
           addLog('🔄 업데이트 확인 중...');
           ipcRenderer.invoke('check-for-updates');
@@ -61,7 +71,7 @@ function App() {
       return () => { 
           ipcRenderer.removeAllListeners('update-msg'); 
           ipcRenderer.removeAllListeners('update-available'); 
-          ipcRenderer.removeAllListeners('update-not-available');
+          ipcRenderer.removeAllListeners('update-not-available'); // 리스너 해제 추가
           ipcRenderer.removeAllListeners('download-progress'); 
           ipcRenderer.removeAllListeners('download-complete'); 
       };
@@ -199,7 +209,7 @@ function App() {
     <div className="container">
       <div className="left-panel" style={{ flex: showVerify ? '0 0 450px' : '1' }}>
         <div className="title-area">
-            <h1>CHAHONG CLOSING</h1>
+            <h1>마감 프로그램</h1>
             <div style={{display:'flex', gap:'5px', alignItems:'center', marginTop:'5px', justifyContent:'center'}}><span className="version-tag">v{appVersion}</span></div>
             <div style={{display:'flex', flexDirection:'column', gap:'5px', marginTop:'15px', alignItems:'center'}}>
                 {isLoggedIn && storeName && <div className="store-badge" style={{background:'#e0e7ff', color:'#3730a3'}}><span>🏢</span> {storeName}</div>}
@@ -209,21 +219,8 @@ function App() {
         <div className="section-card">
             <div className="section-title">Step 1. 스마트 로그인</div>
             <div className="btn-row">
-                {/* ★★★ [변경] 색상을 명확하게 구분! (HAND: 인디고 블루, Naver: 초록) ★★★ */}
-                <button 
-                    className="big-btn" 
-                    onClick={onHandSosLogin} 
-                    style={{ background: isLoggedIn ? '#4b5563' : 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)' }}
-                >
-                    {isLoggedIn ? 'HAND 재조회' : 'HAND 로그인'}
-                </button>
-                <button 
-                    className="big-btn" 
-                    onClick={onNaverLogin} 
-                    style={{ background: isNaverLoggedIn ? '#4b5563' : 'linear-gradient(135deg, #03c75a 0%, #02b04e 100%)' }}
-                >
-                    {isNaverLoggedIn ? 'NPay 재조회' : 'NPay 로그인'}
-                </button>
+                <button className="big-btn" onClick={onHandSosLogin} style={{ background: isLoggedIn ? '#4b5563' : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' }}>{isLoggedIn ? 'HAND 재조회' : 'HAND 로그인'}</button>
+                <button className="big-btn" onClick={onNaverLogin} style={{ background: isNaverLoggedIn ? '#16a34a' : 'linear-gradient(135deg, #059669 0%, #047857 100%)' }}>{isNaverLoggedIn ? 'NPay 재조회' : 'NPay 로그인'}</button>
             </div>
         </div>
         <div className="section-card" style={{ opacity: (isLoggedIn || isNaverLoggedIn) ? 1 : 0.6, pointerEvents: (isLoggedIn || isNaverLoggedIn) ? 'auto' : 'none' }}>
@@ -249,7 +246,7 @@ function App() {
             )}
         </div>
         <div className="status-bar"><div className="status-dot"></div><span>{lastLog}</span></div>
-        <div className="maker-footer">Designed by <strong>CHAHONG Nowon</strong></div>
+        <div className="maker-footer">Developed by <strong>CHAHONG Nowon</strong></div>
       </div>
 
       {showVerify && (
