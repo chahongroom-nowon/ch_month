@@ -27,7 +27,7 @@ export const parseStaffOptions = (html) => {
     return list;
 };
 
-// ★ HandSOS 데이터 파싱 (카드 매출 로직 수정됨) ★
+// ★ HandSOS 데이터 파싱 (강력한 필터 적용됨) ★
 export const parseHandSosData = (html) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
@@ -36,9 +36,15 @@ export const parseHandSosData = (html) => {
     if (!res) return null; 
 
     const designerGroups = [];
+    
+    // 1. 제외할 단어들 (기본)
+    const excludeKeywords = ['합계', '소계', '총계', '고객매출계', '전체합계', '누계', '점판', '선불'];
+
     res.querySelectorAll('table').forEach(tbl => {
       const designerName = tbl.querySelector('thead tr td b')?.innerText.trim();
-      if (!designerName) return;
+      
+      // 디자이너 이름이 없거나, 통계용 테이블이면 스킵
+      if (!designerName || excludeKeywords.some(kw => designerName.includes(kw))) return;
       
       const customerMap = new Map();
       let lastCustomerName = "미지정"; 
@@ -46,7 +52,9 @@ export const parseHandSosData = (html) => {
 
       allRows.forEach(row => {
         const styleAttr = row.getAttribute('style') || '';
+        // 배경색이 #eef(회색계열, 주로 소계/합계 행)이면 스킵
         if (styleAttr.toLowerCase().includes('#eef')) return;
+        
         const tds = row.querySelectorAll('td');
         if (tds.length < 5) return;
         
@@ -56,15 +64,28 @@ export const parseHandSosData = (html) => {
 
         if (tds.length === 15) {
             name = tds[1].innerText.trim();
-            if (name.includes('소') && name.includes('계')) return;
+            
+            // ★★★ [강력 필터] 이름이 이상하면 무조건 버림 ★★★
+            // 1. 제외 키워드 포함
+            if (excludeKeywords.some(kw => name.includes(kw))) return;
+            // 2. 특수기호(=, ▲, +)가 포함된 경우 (통계 행일 확률 100%)
+            if (name.includes('=') || name.includes('▲') || name.includes('+')) return;
+            // 3. 이름에 숫자가 3개 이상 포함된 경우 (예: "1,922,000원") -> 사람이 아님
+            if ((name.match(/\d/g) || []).length >= 3) return;
+
             if (name) lastCustomerName = name; else name = lastCustomerName;
             
-            pay = parseNumber(tds[8].innerText);
-            card = parseNumber(tds[6].innerText); 
+            pay = parseNumber(tds[8]?.innerText);
+            card = parseNumber(tds[6]?.innerText); 
 
         } else if (tds.length === 13) {
             name = lastCustomerName; 
-            pay = parseNumber(tds[6].innerText);
+            
+            // 병합된 행이라도 지난 이름이 금지어면 무시
+            if (excludeKeywords.some(kw => name.includes(kw))) return;
+            if (name.includes('=') || name.includes('▲') || (name.match(/\d/g) || []).length >= 3) return;
+
+            pay = parseNumber(tds[6]?.innerText);
             card = parseNumber(tds[4]?.innerText);
         } else return;
 
@@ -81,7 +102,6 @@ export const parseHandSosData = (html) => {
       let groupCard = 0;
 
       customerMap.forEach((val, key) => { 
-        // ★★★ [수정됨] 페이(total)가 0이라도 카드(card) 매출이 있으면 포함 ★★★
         if (val.total > 0 || val.card > 0) { 
             customers.push({ name: key, total: val.total, card: val.card }); 
             groupTotal += val.total;
@@ -89,7 +109,6 @@ export const parseHandSosData = (html) => {
         } 
       });
 
-      // 매출이 하나라도 있는 디자이너만 그룹에 추가
       if (customers.length > 0) {
           designerGroups.push({ 
               designer: designerName, 
