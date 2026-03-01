@@ -1,17 +1,16 @@
-// src/utils/parsers.js
+export const parseNumber = (str) => parseInt(str?.toString().replace(/[^0-9]/g, '') || '0', 10);
 
-// 숫자만 추출
-export const parseNumber = (str) => parseInt(str?.replace(/[^0-9]/g, '') || '0', 10);
-
-// 이름 정규화 (직급, 공백 제거)
 export const normalizeName = (name) => {
     if (!name) return '';
-    let cleanName = name.replace(/^([sbSB])(\.|\s+)|([sbSB])(?=[가-힣])/g, '');
+    // 이모티콘(👤), 공백 제거 후 "님" 앞의 이름만 추출
+    const match = name.match(/[^\\s👤]+(?=님)/);
+    let cleanName = match ? match[0].trim() : name.replace(/[👤\s]/g, '').split('님')[0];
+    
+    cleanName = cleanName.replace(/^([sbSB])(\.|\s+)|([sbSB])(?=[가-힣])/g, '');
     cleanName = cleanName.replace(/디자이너|실장|수석|점장|원장|부원장/g, '');
     return cleanName.replace(/\s/g, '');
 };
 
-// 직원 목록 파싱
 export const parseStaffOptions = (html) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
@@ -27,7 +26,6 @@ export const parseStaffOptions = (html) => {
     return list;
 };
 
-// ★ HandSOS 데이터 파싱 (강력한 필터 적용됨) ★
 export const parseHandSosData = (html) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
@@ -36,87 +34,115 @@ export const parseHandSosData = (html) => {
     if (!res) return null; 
 
     const designerGroups = [];
-    
-    // 1. 제외할 단어들 (기본)
-    const excludeKeywords = ['합계', '소계', '총계', '고객매출계', '전체합계', '누계', '점판', '선불'];
+    const excludeKeywords = ['합계', '소계', '총계', '고객매출계', '전체합계', '누계', '매출계', '점판', '선불'];
 
     res.querySelectorAll('table').forEach(tbl => {
-      const designerName = tbl.querySelector('thead tr td b')?.innerText.trim();
-      
-      // 디자이너 이름이 없거나, 통계용 테이블이면 스킵
-      if (!designerName || excludeKeywords.some(kw => designerName.includes(kw))) return;
-      
-      const customerMap = new Map();
-      let lastCustomerName = "미지정"; 
-      const allRows = tbl.querySelectorAll('tr');
+        const designerName = tbl.querySelector('thead tr td b')?.innerText.trim();
+        if (!designerName) return;
 
-      allRows.forEach(row => {
-        const styleAttr = row.getAttribute('style') || '';
-        // 배경색이 #eef(회색계열, 주로 소계/합계 행)이면 스킵
-        if (styleAttr.toLowerCase().includes('#eef')) return;
-        
-        const tds = row.querySelectorAll('td');
-        if (tds.length < 5) return;
-        
-        let name = "";
-        let pay = 0;
-        let card = 0; 
+        const cleanDesigner = designerName.replace(/\s/g, '');
+        if (excludeKeywords.some(kw => cleanDesigner.includes(kw))) return;
 
-        if (tds.length === 15) {
-            name = tds[1].innerText.trim();
-            
-            // ★★★ [강력 필터] 이름이 이상하면 무조건 버림 ★★★
-            // 1. 제외 키워드 포함
-            if (excludeKeywords.some(kw => name.includes(kw))) return;
-            // 2. 특수기호(=, ▲, +)가 포함된 경우 (통계 행일 확률 100%)
-            if (name.includes('=') || name.includes('▲') || name.includes('+')) return;
-            // 3. 이름에 숫자가 3개 이상 포함된 경우 (예: "1,922,000원") -> 사람이 아님
-            if ((name.match(/\d/g) || []).length >= 3) return;
+        const customerMap = new Map();
+        let lastCustomerName = "미지정"; 
+        let guestCount = 1;
+        const allRows = tbl.querySelectorAll('tr');
 
-            if (name) lastCustomerName = name; else name = lastCustomerName;
-            
-            pay = parseNumber(tds[8]?.innerText);
-            card = parseNumber(tds[6]?.innerText); 
+        allRows.forEach(row => {
+            const styleAttr = row.getAttribute('style') || '';
+            if (styleAttr.toLowerCase().includes('#eef')) return;
+            const tds = row.querySelectorAll('td');
+            if (tds.length < 5) return;
+            let name = "";
+            let pay = 0;
+            let card = 0; 
+            if (tds.length === 15) {
+                name = tds[1]?.innerText.trim() || '';
+                const cleanName = name.replace(/\s/g, ''); 
+                if (excludeKeywords.some(kw => cleanName.includes(kw))) return;
+                if (!name) name = lastCustomerName; 
+                else if (cleanName.includes('손님') || cleanName.includes('비회원')) {
+                    name = `손님(${guestCount++})`;
+                    lastCustomerName = name; 
+                } else lastCustomerName = name;
+                pay = parseNumber(tds[8]?.innerText);
+                card = parseNumber(tds[6]?.innerText); 
+            } else if (tds.length === 13) {
+                name = lastCustomerName; 
+                pay = parseNumber(tds[6]?.innerText);
+                card = parseNumber(tds[4]?.innerText);
+            } else return;
+            if (!customerMap.has(name)) customerMap.set(name, { total: 0, card: 0 });
+            const current = customerMap.get(name);
+            current.total += pay; 
+            current.card += card; 
+        });
 
-        } else if (tds.length === 13) {
-            name = lastCustomerName; 
-            
-            // 병합된 행이라도 지난 이름이 금지어면 무시
-            if (excludeKeywords.some(kw => name.includes(kw))) return;
-            if (name.includes('=') || name.includes('▲') || (name.match(/\d/g) || []).length >= 3) return;
-
-            pay = parseNumber(tds[6]?.innerText);
-            card = parseNumber(tds[4]?.innerText);
-        } else return;
-
-        if (!customerMap.has(name)) {
-            customerMap.set(name, { total: 0, card: 0 });
+        const customers = [];
+        let groupTotal = 0;
+        let groupCard = 0;
+        customerMap.forEach((val, key) => { 
+            if (val.total > 0 || val.card > 0) { 
+                customers.push({ name: key, total: val.total, card: val.card }); 
+                groupTotal += val.total;
+                groupCard += val.card;
+            } 
+        });
+        if (customers.length > 0) {
+            designerGroups.push({ designer: designerName, customers, totalAmount: groupTotal, totalCard: groupCard });
         }
-        const current = customerMap.get(name);
-        current.total += pay; 
-        current.card += card; 
-      });
-
-      const customers = [];
-      let groupTotal = 0;
-      let groupCard = 0;
-
-      customerMap.forEach((val, key) => { 
-        if (val.total > 0 || val.card > 0) { 
-            customers.push({ name: key, total: val.total, card: val.card }); 
-            groupTotal += val.total;
-            groupCard += val.card;
-        } 
-      });
-
-      if (customers.length > 0) {
-          designerGroups.push({ 
-              designer: designerName, 
-              customers, 
-              totalAmount: groupTotal, 
-              totalCard: groupCard
-          });
-      }
     });
     return designerGroups;
+};
+
+/**
+ * 이미지의 실제 HTML 구조(.staff-group > .staff-header > b)에 맞게 수정한 파서
+ */
+export const parseInternalSalesData = (html) => {
+    console.log("--- 내수 데이터 파싱 시작 ---");
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const result = {}; 
+    
+    // 1. 이미지에 보이는 가장 바깥쪽 컨테이너인 .staff-group을 찾습니다.
+    const staffGroups = doc.querySelectorAll('.staff-group');
+    console.log("발견된 직원 그룹 수:", staffGroups.length);
+
+    staffGroups.forEach((group, index) => {
+        // 2. 이름 추출: .staff-header 내의 b 태그에서 "정예은님" 추출
+        const headerB = group.querySelector('.staff-header b');
+        if (!headerB) return;
+        
+        const rawText = headerB.innerText.trim();
+        const staffName = normalizeName(rawText);
+        console.log(`[${index}] 파싱 중인 직원:`, staffName);
+
+        const categories = { "직원내수": 0, "가발": 0, "CL": 0, "재시술": 0, "명함": 0, "블로거ST": 0 };
+        
+        // 3. 테이블 탐색: 이미지상의 클래스명인 .summary-table을 찾습니다.
+        const summaryTable = group.querySelector('.summary-table');
+        
+        if (summaryTable) {
+            const ths = summaryTable.querySelectorAll('tr th');
+            const tds = summaryTable.querySelectorAll('tr td');
+            
+            ths.forEach((th, idx) => {
+                const key = th.innerText.trim();
+                const val = parseNumber(tds[idx]?.innerText);
+                
+                // 블로거ST 항목 처리 및 나머지 매칭
+                if (key === "블로거ST" || key === "블로거" || key === "ST") {
+                    categories["블로거ST"] += val;
+                } else if (categories.hasOwnProperty(key)) {
+                    categories[key] = val;
+                }
+            });
+            console.log(`   > ${staffName} 데이터 수집 완료:`, categories);
+        }
+        
+        result[staffName] = categories;
+    });
+    
+    console.log("--- 최종 파싱 결과:", result);
+    return result;
 };

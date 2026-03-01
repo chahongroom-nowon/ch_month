@@ -2,9 +2,19 @@ import { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import { ipcRenderer, isElectron } from './utils/ipc';
 import { parseHandSosData, normalizeName, parseStaffOptions } from './utils/parsers';
-import { handleDownloadExcel } from './utils/excel';
 
-function App() {
+// 엑셀 모듈 임포트
+import { executeDailyExcel } from './modules/excelDaily';
+import { executeMonthlyExcel } from './modules/excelMonthly';
+
+// UI 컴포넌트 임포트
+import LoginModule from './components/LoginModule';
+import DailyModule from './components/DailyModule';
+import MonthlyModule from './components/MonthlyModule';
+import StaffModule from './components/StaffModule';
+import ReportModule from './components/ReportModule';
+
+export default function App() {
   const [logs, setLogs] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('daily');
@@ -47,22 +57,15 @@ function App() {
           setModalState({ type: 'PROGRESS', text: '', version: v, percent: 0 });
           ipcRenderer.invoke('start-download');
       });
-      ipcRenderer.on('update-not-available', () => {
-          addLog('✅ 현재 최신 버전입니다.');
-      });
+      ipcRenderer.on('update-not-available', () => { addLog('✅ 현재 최신 버전입니다.'); });
       ipcRenderer.on('download-progress', (e, p) => setModalState(prev => ({ ...prev, type: 'PROGRESS', percent: Math.round(p) })));
       ipcRenderer.on('download-complete', () => setModalState({ type: 'INSTALL', text: '', version: '', percent: 100 }));
       
-      setTimeout(() => {
-          addLog('🔄 업데이트 확인 중...');
-          ipcRenderer.invoke('check-for-updates');
-      }, 1500);
+      setTimeout(() => { addLog('🔄 업데이트 확인 중...'); ipcRenderer.invoke('check-for-updates'); }, 1500);
 
       return () => { 
-          ipcRenderer.removeAllListeners('update-msg'); 
-          ipcRenderer.removeAllListeners('update-available'); 
-          ipcRenderer.removeAllListeners('update-not-available');
-          ipcRenderer.removeAllListeners('download-progress'); 
+          ipcRenderer.removeAllListeners('update-msg'); ipcRenderer.removeAllListeners('update-available'); 
+          ipcRenderer.removeAllListeners('update-not-available'); ipcRenderer.removeAllListeners('download-progress'); 
           ipcRenderer.removeAllListeners('download-complete'); 
       };
     }
@@ -73,8 +76,6 @@ function App() {
   const closeVerifyPanel = () => { setShowVerify(false); window.resizeTo(600, 800); };
   const handleReopenReport = () => { setShowVerify(true); window.resizeTo(1400, 900); };
   const closeModal = () => setModalState({ ...modalState, type: 'NONE' });
-  
-  const handleStartDownload = () => { setModalState(prev => ({ ...prev, type: 'PROGRESS', percent: 0 })); ipcRenderer.invoke('start-download'); };
   const handleInstall = () => ipcRenderer.invoke('install-now');
   
   const removeStaff = (i) => { const l = staffList.filter((_, idx) => idx !== i); setStaffList(l); localStorage.setItem('staffList', JSON.stringify(l)); };
@@ -126,7 +127,6 @@ function App() {
     const result = Array.from(allDesigners).map(normalizedDesignerName => {
         const sosDesignerObj = handSosData.find(d => normalizeName(d.designer) === normalizedDesignerName);
         const naverDesignerList = naverDetails.filter(d => normalizeName(d.designer) === normalizedDesignerName);
-        
         const displayName = sosDesignerObj ? sosDesignerObj.designer : (naverDesignerList[0]?.designer || normalizedDesignerName);
         const sosCustomers = sosDesignerObj ? sosDesignerObj.customers : [];
         const designerCardTotal = sosDesignerObj ? sosDesignerObj.totalCard : 0; 
@@ -192,40 +192,28 @@ function App() {
       }
   };
 
-  const downloadExcel = () => handleDownloadExcel({ mode, dates, staffList, addLog, setLoading });
   const hasData = handSosData.length > 0 || naverDetails.length > 0;
 
   return (
     <div className="container">
       <div className="left-panel" style={{ flex: showVerify ? '0 0 450px' : '1' }}>
         <div className="title-area">
-            <h1>CHAHONG CLOSING</h1>
+            <h1>마감 프로그램</h1>
             <div style={{display:'flex', gap:'5px', alignItems:'center', marginTop:'5px', justifyContent:'center'}}><span className="version-tag">v{appVersion}</span></div>
             <div style={{display:'flex', flexDirection:'column', gap:'5px', marginTop:'15px', alignItems:'center'}}>
                 {isLoggedIn && storeName && <div className="store-badge" style={{background:'#e0e7ff', color:'#3730a3'}}><span>🏢</span> {storeName}</div>}
                 {isNaverLoggedIn && naverStoreName && <div className="store-badge" style={{background:'#dcfce7', color:'#166534'}}><span>N</span> {naverStoreName}</div>}
             </div>
         </div>
-        <div className="section-card">
-            <div className="section-title">Step 1. 스마트 로그인</div>
-            <div className="btn-row">
-                {/* ★★★ [변경] 색상을 명확하게 구분! (HAND: 인디고 블루, Naver: 초록) ★★★ */}
-                <button 
-                    className="big-btn" 
-                    onClick={onHandSosLogin} 
-                    style={{ background: isLoggedIn ? '#4b5563' : 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)' }}
-                >
-                    {isLoggedIn ? 'HAND 재조회' : 'HAND 로그인'}
-                </button>
-                <button 
-                    className="big-btn" 
-                    onClick={onNaverLogin} 
-                    style={{ background: isNaverLoggedIn ? '#4b5563' : 'linear-gradient(135deg, #03c75a 0%, #02b04e 100%)' }}
-                >
-                    {isNaverLoggedIn ? 'NPay 재조회' : 'NPay 로그인'}
-                </button>
-            </div>
-        </div>
+
+        {/* 1. 로그인 모듈 */}
+        <LoginModule 
+            isLoggedIn={isLoggedIn} 
+            isNaverLoggedIn={isNaverLoggedIn} 
+            onHandSosLogin={onHandSosLogin} 
+            onNaverLogin={onNaverLogin} 
+        />
+
         <div className="section-card" style={{ opacity: (isLoggedIn || isNaverLoggedIn) ? 1 : 0.6, pointerEvents: (isLoggedIn || isNaverLoggedIn) ? 'auto' : 'none' }}>
             <div className="section-title">Step 2. 작업 선택</div>
             <div className="tab-group">
@@ -233,81 +221,36 @@ function App() {
                 <button className={`tab-btn ${mode === 'monthly' ? 'active' : ''}`} onClick={() => setMode('monthly')}>월마감</button>
                 <button className={`tab-btn ${mode === 'staff' ? 'active' : ''}`} onClick={() => setMode('staff')}>직원관리</button>
             </div>
+            
+            {/* 2~4. 작업 탭 모듈들 */}
             {mode === 'staff' && (
-                <div className="staff-management-area">
-                   <button onClick={fetchOnlineStaffList} className="sync-btn" disabled={loading}>🔄 HAND 직원 명단 불러오기</button>
-                   <div className="staff-list">{staffList.length === 0 ? <div style={{padding:'30px', textAlign:'center', color:'#adb5bd', fontSize:'13px'}}>등록된 직원이 없습니다.</div> : staffList.map((staff, i) => (<div key={i} className="staff-item"><div style={{display:'flex', alignItems:'center', gap:'6px'}}><span style={{fontWeight:'700', color:'#495057'}}>{staff.name}</span><span style={{fontSize:'12px', color:'#868e96', background:'#f1f3f5', padding:'2px 6px', borderRadius:'4px'}}>{staff.code}</span></div><button onClick={() => removeStaff(i)} className="del-btn">삭제</button></div>))}</div>
-                </div>
+                <StaffModule staffList={staffList} fetchOnlineStaffList={fetchOnlineStaffList} removeStaff={removeStaff} loading={loading} />
             )}
-            {mode !== 'staff' && (
-                <div className="date-control">
-                    <div className="date-btn-group"><button className="sub-btn" onClick={() => setQuickDate('yesterday')}>⏮ 어제</button><button className="sub-btn" onClick={() => setQuickDate('today')}>오늘</button></div>
-                    <input type="date" value={dates.start} onChange={handleDateChange} className="main-date-input" />
-                    {mode === 'daily' && (<>{hasData && !showVerify ? (<div className="info-box clickable" onClick={handleReopenReport}><div className="info-icon">📊</div><div className="info-text"><strong>리포트 다시 열기</strong><br/>이미 조회된 데이터를 다시 확인합니다.</div></div>) : (!showVerify && (<div className="info-box"><div className="info-icon">👉</div><div className="info-text">로그인하면 <strong>일 마감 리포트</strong>가<br/>자동으로 실행됩니다.</div></div>))}</>)}
-                    <button className="big-btn" onClick={downloadExcel} disabled={loading} style={{ marginTop: '15px', background: '#4b5563' }}>엑셀 다운로드</button>
-                </div>
+            {mode === 'daily' && (
+                <DailyModule 
+                    dates={dates} handleDateChange={handleDateChange} setQuickDate={setQuickDate} 
+                    onDownload={() => executeDailyExcel({ dates, staffList, addLog, setLoading })} 
+                    loading={loading} hasData={hasData} showVerify={showVerify} handleReopenReport={handleReopenReport} 
+                />
+            )}
+            {mode === 'monthly' && (
+                <MonthlyModule 
+                    dates={dates} handleDateChange={handleDateChange} 
+                    onDownload={() => executeMonthlyExcel({ dates, staffList, addLog, setLoading })} 
+                    loading={loading} 
+                />
             )}
         </div>
         <div className="status-bar"><div className="status-dot"></div><span>{lastLog}</span></div>
-        <div className="maker-footer">Designed by <strong>CHAHONG Nowon</strong></div>
+        <div className="maker-footer">Developed by <strong>CHAHONG Nowon</strong></div>
       </div>
 
+      {/* 5. 리포트 모듈 */}
       {showVerify && (
-        <div className="right-panel">
-            <div className="panel-header"><span className="panel-title">📅 일 마감 리포트</span><button className="close-btn" onClick={closeVerifyPanel}>닫기 X</button></div>
-            <div className="list-container">
-                <div className="summary-card">
-                    <div className="sum-item"><div className="sum-label">HAND</div><div className="sum-value blue">{grandTotals.sos.toLocaleString()}</div></div>
-                    <div className="divider"></div>
-                    <div className="sum-item"><div className="sum-label" style={{color:'#7c3aed'}}>Card</div><div className="sum-value" style={{color:'#7c3aed'}}>{grandTotals.card.toLocaleString()}</div></div>
-                    <div className="divider"></div>
-                    <div className="sum-item"><div className="sum-label">Naver Pay</div><div className="sum-value green">{grandTotals.naver.toLocaleString()}</div></div>
-                    <div className="divider"></div>
-                    <div className="sum-item"><div className="sum-label">Gap</div><div className={`sum-value ${(grandTotals.sos - grandTotals.naver) === 0 ? 'green' : 'red'}`}>{(grandTotals.sos - grandTotals.naver).toLocaleString()}</div></div>
-                </div>
-                {mergedData.length === 0 ? <div style={{padding:20, textAlign:'center', color:'#999'}}>데이터를 불러오는 중입니다...</div> : 
-                    <div className="grid-layout">
-                        {mergedData.map((data, idx) => {
-                            const totalDiff = data.totalSos - data.totalNaver;
-                            const isTotalMatch = totalDiff === 0;
-                            const cardClass = isTotalMatch ? 'staff-card' : 'staff-card error';
-                            return (
-                                <div key={idx} className={cardClass}>
-                                    <div className="card-header">
-                                        <div>
-                                            <div className="staff-name">💇‍♀️ {data.designer}</div>
-                                            <div style={{marginTop:'5px'}}>{isTotalMatch ? <span className="badge match">일치</span> : <span className="badge mismatch">차액 {totalDiff.toLocaleString()}</span>}</div>
-                                        </div>
-                                        <div className="header-amounts">
-                                            <div className="amt-row"><span style={{color:'#6b7280'}}>H:</span> {data.totalSos.toLocaleString()}</div>
-                                            <div className="amt-row"><span style={{color:'#7c3aed'}}>C:</span> {data.totalCard.toLocaleString()}</div>
-                                            <div className="amt-row"><span style={{color:'#059669'}}>N:</span> {data.totalNaver.toLocaleString()}</div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        {data.customers.map((c, cIdx) => {
-                                            const isMatch = c.diff === 0;
-                                            const rowClass = isMatch ? 'customer-row match' : 'customer-row mismatch';
-                                            return (
-                                                <div key={cIdx} className={rowClass}>
-                                                    <div className="row-top"><span>{c.name}</span><span style={{color: isMatch ? '#059669' : '#dc2626'}}>{isMatch ? '일치' : `${c.diff.toLocaleString()}`}</span></div>
-                                                    <div className="row-detail"><span>HAND(Pay)</span><span>{c.sos.toLocaleString()}</span></div>
-                                                    <div className="row-detail" style={{color:'#7c3aed'}}><span>HAND(Card)</span><span>{c.sosCard.toLocaleString()}</span></div>
-                                                    <div className="row-detail nb"><span>{c.naverDetailName || 'Naver'}</span><span>{c.naver.toLocaleString()}</span></div>
-                                                </div>
-                                            );
-                                        })}
-                                        {data.customers.length === 0 && <div style={{color:'#999', fontSize:'12px', textAlign:'center', padding:'10px'}}>내역 없음</div>}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                }
-            </div>
-        </div>
+          <ReportModule closeVerifyPanel={closeVerifyPanel} grandTotals={grandTotals} mergedData={mergedData} />
       )}
 
+      {/* 모달 창들 */}
       {showStaffModal && (
         <div className="modal-overlay">
             <div className="staff-modal-content">
@@ -335,5 +278,3 @@ function App() {
     </div>
   );
 }
-
-export default App;

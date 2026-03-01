@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import { ipcRenderer, isElectron } from './utils/ipc';
-import { parseHandSosData, normalizeName, parseStaffOptions } from './utils/parsers';
+import { parseHandSosData, normalizeName, parseStaffOptions, parseInternalSalesData } from './utils/parsers';
 import { handleDownloadExcel } from './utils/excel';
 
 function App() {
@@ -42,27 +42,17 @@ function App() {
       ipcRenderer.invoke('get-app-version').then(ver => setAppVersion(ver));
       window.resizeTo(600, 800);
 
-      // 1. 일반 알림
       ipcRenderer.on('update-msg', (e, p) => setModalState({ type: 'INFO', text: p.text, version: '', percent: 0 }));
-
-      // 2. 업데이트 발견 시 -> 자동 다운로드 시작
       ipcRenderer.on('update-available', (e, v) => {
           setModalState({ type: 'PROGRESS', text: '', version: v, percent: 0 });
           ipcRenderer.invoke('start-download');
       });
-
-      // 3. ★★★ [추가됨] 최신 버전일 경우 알림 ★★★
       ipcRenderer.on('update-not-available', () => {
           addLog('✅ 현재 최신 버전입니다.');
       });
-
-      // 4. 다운로드 진행률
       ipcRenderer.on('download-progress', (e, p) => setModalState(prev => ({ ...prev, type: 'PROGRESS', percent: Math.round(p) })));
-
-      // 5. 다운로드 완료
       ipcRenderer.on('download-complete', () => setModalState({ type: 'INSTALL', text: '', version: '', percent: 100 }));
       
-      // 앱 시작 1.5초 후 업데이트 체크
       setTimeout(() => {
           addLog('🔄 업데이트 확인 중...');
           ipcRenderer.invoke('check-for-updates');
@@ -71,7 +61,7 @@ function App() {
       return () => { 
           ipcRenderer.removeAllListeners('update-msg'); 
           ipcRenderer.removeAllListeners('update-available'); 
-          ipcRenderer.removeAllListeners('update-not-available'); // 리스너 해제 추가
+          ipcRenderer.removeAllListeners('update-not-available');
           ipcRenderer.removeAllListeners('download-progress'); 
           ipcRenderer.removeAllListeners('download-complete'); 
       };
@@ -83,8 +73,6 @@ function App() {
   const closeVerifyPanel = () => { setShowVerify(false); window.resizeTo(600, 800); };
   const handleReopenReport = () => { setShowVerify(true); window.resizeTo(1400, 900); };
   const closeModal = () => setModalState({ ...modalState, type: 'NONE' });
-  
-  const handleStartDownload = () => { setModalState(prev => ({ ...prev, type: 'PROGRESS', percent: 0 })); ipcRenderer.invoke('start-download'); };
   const handleInstall = () => ipcRenderer.invoke('install-now');
   
   const removeStaff = (i) => { const l = staffList.filter((_, idx) => idx !== i); setStaffList(l); localStorage.setItem('staffList', JSON.stringify(l)); };
@@ -136,18 +124,15 @@ function App() {
     const result = Array.from(allDesigners).map(normalizedDesignerName => {
         const sosDesignerObj = handSosData.find(d => normalizeName(d.designer) === normalizedDesignerName);
         const naverDesignerList = naverDetails.filter(d => normalizeName(d.designer) === normalizedDesignerName);
-        
         const displayName = sosDesignerObj ? sosDesignerObj.designer : (naverDesignerList[0]?.designer || normalizedDesignerName);
         const sosCustomers = sosDesignerObj ? sosDesignerObj.customers : [];
         const designerCardTotal = sosDesignerObj ? sosDesignerObj.totalCard : 0; 
-
         const rowMap = new Map();
         sosCustomers.forEach(c => {
             const key = normalizeName(c.name);
             if (!rowMap.has(key)) rowMap.set(key, { name: c.name, sos: 0, sosCard: 0, naver: 0, naverNames: [] });
             const row = rowMap.get(key); row.sos += c.total; row.sosCard += c.card;
         });
-
         naverDesignerList.forEach(item => {
             const bookerKey = normalizeName(item.name);
             const visitorKey = item.visitor ? normalizeName(item.visitor) : null;
@@ -165,11 +150,9 @@ function App() {
             const detailStr = item.visitor ? `${item.name}(방문:${item.visitor})` : item.name;
             row.naverNames.push(detailStr);
         });
-
         const customers = Array.from(rowMap.values()).map(row => ({
             name: row.name, sos: row.sos, sosCard: row.sosCard, naver: row.naver, diff: row.sos - row.naver, naverDetailName: [...new Set(row.naverNames)].join(', ')
         }));
-        
         const totalSos = customers.reduce((a,c) => a + c.sos, 0);
         const totalNaver = customers.reduce((a,c) => a + c.naver, 0);
         return { designer: displayName, totalSos, totalCard: designerCardTotal, totalNaver, customers };
@@ -202,14 +185,31 @@ function App() {
       }
   };
 
-  const downloadExcel = () => handleDownloadExcel({ mode, dates, staffList, addLog, setLoading });
-  const hasData = handSosData.length > 0 || naverDetails.length > 0;
+  // ★ [수정됨] 내수 데이터 크롤링 후 엑셀 다운로드 연동 ★
+  const downloadExcel = async () => {
+    setLoading(true);
+    let internalSales = {};
+
+    if (mode === 'monthly') {
+        addLog("🔗 내수 정산 페이지 데이터 불러오는 중...");
+        try {
+            const targetUrl = 'https://chahongroom-nowon.github.io/calc/';
+            const html = await ipcRenderer.invoke('scrap-data', { targetUrl });
+            internalSales = parseInternalSalesData(html);
+            addLog(`✅ ${Object.keys(internalSales).length}명의 내수 데이터 확보 완료`);
+        } catch (e) {
+            addLog("⚠️ 내수 데이터를 가져오지 못했습니다. 매출만 기록합니다.");
+        }
+    }
+
+    handleDownloadExcel({ mode, dates, staffList, internalSales, addLog, setLoading });
+  };
 
   return (
     <div className="container">
       <div className="left-panel" style={{ flex: showVerify ? '0 0 450px' : '1' }}>
         <div className="title-area">
-            <h1>마감 프로그램</h1>
+            <h1>CHAHONG REPORT</h1>
             <div style={{display:'flex', gap:'5px', alignItems:'center', marginTop:'5px', justifyContent:'center'}}><span className="version-tag">v{appVersion}</span></div>
             <div style={{display:'flex', flexDirection:'column', gap:'5px', marginTop:'15px', alignItems:'center'}}>
                 {isLoggedIn && storeName && <div className="store-badge" style={{background:'#e0e7ff', color:'#3730a3'}}><span>🏢</span> {storeName}</div>}

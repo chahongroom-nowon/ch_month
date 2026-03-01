@@ -1,4 +1,3 @@
-// ★ Menu 모듈 추가
 const { app, BrowserWindow, session, ipcMain, shell, Menu, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
@@ -8,11 +7,9 @@ const os = require('os');
 let mainWindow;
 let loginWindow;
 let naverWindow;
-
-let currentNaverBizId = null; 
+let currentNaverBizId = null;
 
 function createWindow() {
-  // ★ 상단 메뉴바(File, Edit 등) 제거
   Menu.setApplicationMenu(null);
 
   mainWindow = new BrowserWindow({
@@ -20,8 +17,7 @@ function createWindow() {
     height: 800,
     show: false,
     resizable: true,
-    title: '마감 프로그램', // ★ 윈도우 타이틀 설정
-    // ★★★ [여기 추가] 창 아이콘 설정 (윈도우용) ★★★
+    title: '마감 프로그램',
     icon: path.join(__dirname, '../public/icon2.ico'),
     webPreferences: {
       nodeIntegration: true,
@@ -32,10 +28,11 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    // [수정] 개발자 도구 자동 실행(openDevTools) 코드를 삭제했습니다.
   });
-  
+
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ['*://*/*'] }, 
+    { urls: ['*://*/*'] },
     (details, callback) => {
       const headers = details.requestHeaders;
       headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -53,7 +50,7 @@ function createWindow() {
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-// --- IPC 핸들러 (기존 유지) ---
+// --- [자동 업데이트 관련 핸들러] ---
 ipcMain.handle('check-for-updates', async () => { if (!app.isPackaged) return; try { await autoUpdater.checkForUpdates(); } catch (e) {} });
 ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('start-download', () => autoUpdater.downloadUpdate());
@@ -63,12 +60,14 @@ autoUpdater.on('update-available', (info) => mainWindow.webContents.send('update
 autoUpdater.on('download-progress', (p) => mainWindow.webContents.send('download-progress', p.percent));
 autoUpdater.on('update-downloaded', () => mainWindow.webContents.send('download-complete'));
 
-
-// 1. HandSOS 로그인 (기존 유지)
+// --- [1. HandSOS 로그인 및 스크래핑] ---
 ipcMain.handle('open-login-window', async () => {
   if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.show(); return { status: "ALREADY_OPEN" }; }
+  
+  // 사용자가 아이디/비번을 입력해야 하므로 로그인 시에는 창을 보여줍니다.
   loginWindow = new BrowserWindow({ width: 1200, height: 900, parent: mainWindow, show: true, title: 'HAND 로그인' });
   loginWindow.loadURL('https://www.handsos.com/login/login.asp?p=pc');
+  
   return new Promise((resolve) => {
     const checkLoginInterval = setInterval(async () => {
       if (!loginWindow || loginWindow.isDestroyed()) { clearInterval(checkLoginInterval); resolve({ status: "CLOSED" }); return; }
@@ -81,7 +80,11 @@ ipcMain.handle('open-login-window', async () => {
             return null;
         })();`;
         const storeName = await loginWindow.webContents.executeJavaScript(script);
-        if (storeName) { clearInterval(checkLoginInterval); loginWindow.hide(); resolve({ status: "SUCCESS", storeName: storeName.trim() }); }
+        if (storeName) { 
+            clearInterval(checkLoginInterval); 
+            loginWindow.hide(); // 로그인 성공 시 창을 숨깁니다.
+            resolve({ status: "SUCCESS", storeName: storeName.trim() }); 
+        }
       } catch (err) {}
     }, 1000);
     loginWindow.on('closed', () => { clearInterval(checkLoginInterval); loginWindow = null; });
@@ -90,59 +93,41 @@ ipcMain.handle('open-login-window', async () => {
 
 ipcMain.handle('scrap-data', async (event, payload) => {
   const { targetUrl, ...params } = payload;
-  const script = `(function(){var form=document.createElement("form");form.method="POST";form.action="${targetUrl}";var p=${JSON.stringify(params)};for(var k in p){var i=document.createElement("input");i.type="hidden";i.name=k;i.value=p[k];form.appendChild(i);}document.body.appendChild(form);form.submit();})();`;
   if(loginWindow && !loginWindow.isDestroyed()) {
+      // [수정] 스크래핑 중에는 창을 다시 띄우지(show) 않습니다.
+      const script = `(function(){
+        var form=document.createElement("form");
+        form.method="POST";
+        form.action="${targetUrl}";
+        var p=${JSON.stringify(params)};
+        for(var k in p){
+          var i=document.createElement("input");
+          i.type="hidden"; i.name=k; i.value=p[k];
+          form.appendChild(i);
+        }
+        document.body.appendChild(form);
+        form.submit();
+      })();`;
       await loginWindow.webContents.executeJavaScript(script);
       await new Promise(r => loginWindow.webContents.once('did-finish-load', r));
-      await new Promise(r => setTimeout(r, 500));
-      return await loginWindow.webContents.executeJavaScript('document.documentElement.outerHTML');
+      await new Promise(r => setTimeout(r, 800));
+      const html = await loginWindow.webContents.executeJavaScript('document.documentElement.outerHTML');
+      return html;
   }
   return "";
 });
 
-ipcMain.handle('get-template', async (event, fileName) => {
-  // 개발 환경(public 폴더) vs 빌드 환경(resources 폴더) 경로 분기
-  const templatePath = app.isPackaged 
-    ? path.join(process.resourcesPath, fileName) 
-    : path.join(__dirname, `../public/${fileName}`);
-    
-  return fs.readFileSync(templatePath);
-});
-
-// ★★★ [수정됨] 엑셀 파일 저장 핸들러 (사용자가 저장 위치 선택) ★★★
-ipcMain.handle('save-excel-file', async (event, { buffer, fileName }) => {
-  const { filePath } = await dialog.showSaveDialog({
-    title: '엑셀 파일 저장',
-    defaultPath: fileName,
-    filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
-  });
-
-  if (filePath) {
-    fs.writeFileSync(filePath, Buffer.from(buffer));
-    // 저장 후 바로 파일 열기 (선택 사항)
-    // await shell.openPath(filePath); 
-    return { success: true, filePath };
-  } else {
-    throw new Error('파일 저장이 취소되었습니다.');
-  }
-});
-
-// 기존의 'open-excel-direct' 핸들러 (임시 폴더에 저장 후 바로 열기 - 필요 시 사용)
-ipcMain.handle('open-excel-direct', async (event, { buffer, fileName }) => {
-  const filePath = path.join(os.tmpdir(), fileName);
-  fs.writeFileSync(filePath, Buffer.from(buffer));
-  await shell.openPath(filePath);
-});
-
-
-// 2. Naver 로그인 (기존 유지)
+// --- [2. 네이버 로그인 및 매출 조회] ---
 ipcMain.handle('open-naver-login', async () => {
   if (naverWindow && !naverWindow.isDestroyed()) { naverWindow.show(); return { status: "ALREADY_OPEN" }; }
+  
+  // 네이버 로그인도 직접 입력이 필요하므로 창을 보여줍니다.
   naverWindow = new BrowserWindow({ 
       width: 1000, height: 800, parent: mainWindow, show: true, title: '네이버 로그인',
       webPreferences: { nodeIntegration: true, contextIsolation: false, webSecurity: false }
   });
   naverWindow.loadURL('https://new.smartplace.naver.com/'); 
+  
   return new Promise((resolve) => {
       let foundId = false;
       naverWindow.on('closed', () => { 
@@ -156,7 +141,6 @@ ipcMain.handle('open-naver-login', async () => {
           const match = details.url.match(/\/businesses\/(\d+)(\?|$)/);
           if (match && match[1]) {
               const detectedId = match[1];
-              console.log("🔥 ID 감지:", detectedId);
               foundId = true;
               currentNaverBizId = detectedId;
               setTimeout(async () => {
@@ -164,13 +148,9 @@ ipcMain.handle('open-naver-login', async () => {
                       if(!naverWindow || naverWindow.isDestroyed()) return;
                       const script = `(async () => { try { const res = await fetch('https://partner.booking.naver.com/api/businesses/${detectedId}'); const data = await res.json(); return data.name; } catch (e) { return null; } })();`;
                       const storeName = await naverWindow.webContents.executeJavaScript(script);
-                      console.log("✅ 매장명:", storeName);
-                      naverWindow.hide(); 
+                      naverWindow.hide(); // 연동 성공 시 창을 숨깁니다.
                       resolve({ status: "SUCCESS", storeName: storeName || "네이버 매장" });
-                  } catch (e) {
-                      console.log("❌ API 실패:", e);
-                      foundId = false; 
-                  }
+                  } catch (e) { foundId = false; }
               }, 200);
           }
           callback({ cancel: false });
@@ -178,34 +158,102 @@ ipcMain.handle('open-naver-login', async () => {
   });
 });
 
-
-// 3. Naver 매출 조회 (기존 유지)
 ipcMain.handle('get-naver-sales', async (event, { date }) => {
   if (!currentNaverBizId) return { total: -1, detailList: [] };
+  
+  // 데이터 조회 시에는 창을 백그라운드(show: false)에서 생성하거나 유지합니다.
   if (!naverWindow || naverWindow.isDestroyed()) {
       naverWindow = new BrowserWindow({ width: 1000, height: 800, show: false, webPreferences: { nodeIntegration: true, contextIsolation: false, webSecurity: false } });
-      // bizId가 없으면 로드 불가하므로 예외처리 필요할 수 있음
       await naverWindow.loadURL(`https://partner.booking.naver.com/bizes/${currentNaverBizId}/booking-list-view`);
       await new Promise(r => setTimeout(r, 2000));
-  }
+  } 
+
   const startTime = new Date(date + 'T00:00:00').toISOString();
   const endTime = new Date(date + 'T23:59:59').toISOString();
   const apiUrl = `https://partner.booking.naver.com/api/businesses/${currentNaverBizId}/bookings?bizItemTypes=STANDARD&dateDropdownType=TODAY&dateFilter=USEDATE&startDateTime=${encodeURIComponent(startTime)}&endDateTime=${encodeURIComponent(endTime)}&maxDays=31&page=0&size=100`;
   const script = `(async () => { const res = await fetch("${apiUrl}"); return await res.json(); })();`;
   try {
     const result = await naverWindow.webContents.executeJavaScript(script);
-    let total = 0; 
-    let detailList = [];
+    let total = 0, detailList = [];
     if (result && Array.isArray(result)) {
       result.forEach(item => {
         const validPayments = item.payments ? item.payments.filter(p => p.status !== "CANCELED") : [];
         if (validPayments.length > 0) {
-          const validAmountSum = validPayments.reduce((acc, p) => { const paid = p.paidAmount || 0; const refunded = p.refundedAmount || 0; return acc + (paid - refunded); }, 0);
-          if (validAmountSum > 0) { total += validAmountSum; detailList.push({ name: item.name, visitor: (item.hasVisitor && item.visitorName) ? item.visitorName : null, price: validAmountSum, designer: item.originalBizItemName || '-' }); }
+          const sum = validPayments.reduce((acc, p) => acc + (p.paidAmount || 0) - (p.refundedAmount || 0), 0);
+          if (sum > 0) { total += sum; detailList.push({ name: item.name, visitor: item.visitorName || null, price: sum, designer: item.originalBizItemName || '-' }); }
         }
       });
-      detailList.sort((a, b) => a.designer.localeCompare(b.designer));
     }
     return { total, detailList };
   } catch (e) { return { total: -1, detailList: [] }; }
+});
+
+// --- [3. 내수 데이터 정산 - 완전 자동이므로 show: false] ---
+// --- [3. 내수 데이터 정산 스크래핑 - 선택자 수정 버전] ---
+ipcMain.handle('scrap-internal-sales', async () => {
+  let calcWin = new BrowserWindow({
+    width: 1200, height: 900,
+    show: false, 
+    webPreferences: { nodeIntegration: false, contextIsolation: true, webSecurity: false }
+  });
+
+  await calcWin.loadURL('https://chahongroom-nowon.github.io/calc/');
+  
+  const analogScript = `
+    new Promise((resolve) => {
+      const checkBtn = setInterval(() => {
+          const tabs = Array.from(document.querySelectorAll('button'));
+          const historyBtn = tabs.find(b => b.innerText.includes('내역 보기'));
+          
+          if (historyBtn) {
+              clearInterval(checkBtn);
+              historyBtn.click();
+              
+              let dataCheckCount = 0;
+              const checkData = setInterval(() => {
+                  // [수정] 이미지 구조에 맞게 .staff-group과 .summary-table로 변경
+                  const groups = document.querySelectorAll('.staff-group');
+                  const tables = document.querySelectorAll('.summary-table');
+                  
+                  if (groups.length > 0 && tables.length > 0) {
+                      clearInterval(checkData);
+                      // 데이터 렌더링 안정을 위해 대기 후 HTML 반환
+                      setTimeout(() => resolve(document.documentElement.innerHTML), 1500);
+                  }
+                  if (dataCheckCount++ > 40) { 
+                      clearInterval(checkData); 
+                      resolve(document.documentElement.innerHTML); 
+                  }
+              }, 500);
+          }
+      }, 500);
+    });
+  `;
+  
+  try {
+    const html = await calcWin.webContents.executeJavaScript(analogScript);
+    setTimeout(() => { if(!calcWin.isDestroyed()) calcWin.destroy(); }, 2000);
+    return html;
+  } catch (e) {
+    if (!calcWin.isDestroyed()) calcWin.destroy();
+    return "";
+  }
+});
+
+// --- [유틸리티 핸들러] ---
+ipcMain.handle('get-template', async (event, fileName) => {
+  const templatePath = app.isPackaged ? path.join(process.resourcesPath, fileName) : path.join(__dirname, `../public/${fileName}`);
+  return fs.readFileSync(templatePath);
+});
+
+ipcMain.handle('open-excel-direct', async (event, { buffer, fileName }) => {
+  const filePath = path.join(os.tmpdir(), fileName);
+  fs.writeFileSync(filePath, Buffer.from(buffer));
+  await shell.openPath(filePath);
+});
+
+ipcMain.handle('save-excel-file', async (event, { buffer, fileName }) => {
+  const { filePath } = await dialog.showSaveDialog({ title: '엑셀 파일 저장', defaultPath: fileName, filters: [{ name: 'Excel Files', extensions: ['xlsx'] }] });
+  if (filePath) { fs.writeFileSync(filePath, Buffer.from(buffer)); return { success: true, filePath }; }
+  throw new Error('파일 저장이 취소되었습니다.');
 });

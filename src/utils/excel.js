@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import { ipcRenderer } from './ipc';
 import { parseNumber } from './parsers';
 
-// 엑셀용 파싱 로직 (구버전 유지)
+// 엑셀용 파싱 로직 (원본 유지)
 const parseTableToDataForExcel = (html, currentMode) => {
     const parser = new DOMParser(); const doc = parser.parseFromString(html, 'text/html');
     if (currentMode === 'monthly') {
@@ -21,7 +21,10 @@ const parseTableToDataForExcel = (html, currentMode) => {
       res.querySelectorAll('table').forEach(tbl => {
         const name = tbl.querySelector('thead tr td b')?.innerText.trim();
         const allRows = tbl.querySelectorAll('tr'); let dataRow = null;
-        for (let row of allRows) { const styleAttr = row.getAttribute('style'); if (styleAttr && styleAttr.toLowerCase().includes('#eef')) { dataRow = row; break; } }
+        for (let row of allRows) { 
+            const styleAttr = row.getAttribute('style') || '';
+            if (styleAttr.toLowerCase().includes('#eef')) { dataRow = row; break; } 
+        }
         if (dataRow) {
             const tds = dataRow.querySelectorAll('td');
             if (name && tds.length >= 6) { resultList.push({ name, cash: parseNumber(tds[2].innerText), card: parseNumber(tds[3].innerText), pay: parseNumber(tds[5].innerText) }); }
@@ -40,7 +43,7 @@ const getMonthRange = (dateStr) => {
     return { strS, strE };
 };
 
-export const handleDownloadExcel = async ({ mode, dates, staffList, addLog, setLoading }) => {
+export const handleDownloadExcel = async ({ mode, dates, staffList, internalSales, addLog, setLoading }) => {
     setLoading(true); 
     let searchStart = dates.start; let searchEnd = dates.end;
     
@@ -78,25 +81,42 @@ export const handleDownloadExcel = async ({ mode, dates, staffList, addLog, setL
                      ws.getCell(`B${r}`).value = item.pay; ws.getCell(`C${r}`).value = item.card; ws.getCell(`D${r}`).value = item.cash;
                  }
                });
+               
+               // ★ [신규 기능] 파이어베이스 내수 데이터 매칭 ★
+               if (internalSales && internalSales[staff.name]) {
+                   const d = internalSales[staff.name];
+                   ws.getCell('E53').value = d["직원내수"] || 0;
+                   ws.getCell('E54').value = (d["가발"] || 0) + (d["CL"] || 0); 
+                   ws.getCell('E55').value = d["재시술"] || 0;
+                   ws.getCell('E56').value = d["명함"] || 0;
+                   ws.getCell('E57').value = d["블로거ST"] || 0; 
+               }
+               
                addLog(`✅ [${staff.name}] 데이터 저장 완료`);
              } else { addLog(`⚠️ [${staff.name}] 엑셀 시트가 없습니다.`); }
           } else {
-            // 일마감: 6~26행 매칭
-            const ws = workbook.worksheets[0]; const titleCell = ws.getCell('B2'); 
-            if(titleCell) titleCell.value = `${dates.start} 일일 매출 현황`;
-            let matchCount = 0;
-            resultData.data.forEach(data => {
-              const totalSum = (data.cash || 0) + (data.card || 0) + (data.pay || 0); 
-              addLog(`👤 ${data.name} / ${totalSum.toLocaleString()}원`);
-              for (let r = 6; r <= 26; r++) {
-                const cell = ws.getCell(`B${r}`);
-                if (cell.text.replace(/\s/g,'').includes(data.name.replace(/\s/g,'')) || (!cell.value && r >= 18)) {
-                  cell.value = data.name; ws.getCell(`C${r}`).value = data.pay; ws.getCell(`E${r}`).value = data.card; ws.getCell(`G${r}`).value = data.cash;
-                  matchCount++; break;
-                }
-              }
-            });
-            addLog(`✅ 총 ${matchCount}명 처리 완료`);
+             const ws = workbook.worksheets[0]; const titleCell = ws.getCell('B2'); 
+             if(titleCell) titleCell.value = `${dates.start} 일일 매출 현황`;
+             let matchCount = 0;
+             
+             resultData.data.forEach(data => {
+               for (let r = 6; r <= 26; r++) {
+                 const cell = ws.getCell(`B${r}`);
+                 
+                 // ★★★ [해결 핵심] 엑셀의 글자(Rich Text 포함)를 완벽하게 읽는 오리지널 방식 복구 ★★★
+                 const cellText = cell.text ? String(cell.text).replace(/\s/g, '') : '';
+                 const dataName = data.name ? String(data.name).replace(/\s/g, '') : '';
+                 
+                 if ((cellText && cellText.includes(dataName)) || (!cell.value && r >= 18)) {
+                   cell.value = data.name; 
+                   ws.getCell(`C${r}`).value = data.pay; 
+                   ws.getCell(`E${r}`).value = data.card; 
+                   ws.getCell(`G${r}`).value = data.cash;
+                   matchCount++; break;
+                 }
+               }
+             });
+             addLog(`✅ 총 ${matchCount}명 처리 완료`);
           }
         } else { addLog(`⚠️ [${staff.name}] 데이터 없음`); }
       } catch (innerError) { addLog(`❌ [${staff.name}] 오류: ${innerError.message}`); }
