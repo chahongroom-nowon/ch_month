@@ -60,27 +60,31 @@ export const parseHandSosData = (html) => {
             if (tds.length < 5) return;
             let name = "";
             let pay = 0;
-            let card = 0; 
-            if (tds.length === 15) {
+            let card = 0;
+            let etc = 0;
+            if (tds.length === 15 || tds.length === 14) {
                 name = tds[1]?.innerText.trim() || '';
-                const cleanName = name.replace(/\s/g, ''); 
+                const cleanName = name.replace(/\s/g, '');
                 if (excludeKeywords.some(kw => cleanName.includes(kw))) return;
-                if (!name) name = lastCustomerName; 
+                if (!name) name = lastCustomerName;
                 else if (cleanName.includes('손님') || cleanName.includes('비회원')) {
                     name = `손님(${guestCount++})`;
-                    lastCustomerName = name; 
+                    lastCustomerName = name;
                 } else lastCustomerName = name;
                 pay = parseNumber(tds[8]?.innerText);
-                card = parseNumber(tds[6]?.innerText); 
+                card = parseNumber(tds[6]?.innerText);
+                etc = parseNumber(tds[9]?.innerText);
             } else if (tds.length === 13) {
-                name = lastCustomerName; 
+                name = lastCustomerName;
                 pay = parseNumber(tds[6]?.innerText);
                 card = parseNumber(tds[4]?.innerText);
+                etc = parseNumber(tds[7]?.innerText);
             } else return;
+            // 예약금 등 기타 결제 방식도 매출 누락 없이 고객 매출에 합산
             if (!customerMap.has(name)) customerMap.set(name, { total: 0, card: 0 });
             const current = customerMap.get(name);
-            current.total += pay; 
-            current.card += card; 
+            current.total += pay + etc;
+            current.card += card;
         });
 
         const customers = [];
