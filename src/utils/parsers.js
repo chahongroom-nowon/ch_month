@@ -1,4 +1,7 @@
-export const parseNumber = (str) => parseInt(str?.toString().replace(/[^0-9]/g, '') || '0', 10);
+export const parseNumber = (str) => {
+    const match = str?.toString().match(/-?[\d,]+/);
+    return match ? parseInt(match[0].replace(/[^0-9-]/g, ''), 10) : 0;
+};
 
 export const normalizeName = (name) => {
     if (!name) return '';
@@ -51,6 +54,8 @@ export const parseHandSosData = (html) => {
         allRows.forEach(row => {
             const styleAttr = row.getAttribute('style') || '';
             if (styleAttr.toLowerCase().includes('#eef')) return;
+            const rowText = row.innerText || '';
+            if (rowText.includes('▲') || rowText.includes('▼')) return;
             const tds = row.querySelectorAll('td');
             if (tds.length < 5) return;
             let name = "";
@@ -93,56 +98,4 @@ export const parseHandSosData = (html) => {
         }
     });
     return designerGroups;
-};
-
-/**
- * 이미지의 실제 HTML 구조(.staff-group > .staff-header > b)에 맞게 수정한 파서
- */
-export const parseInternalSalesData = (html) => {
-    console.log("--- 내수 데이터 파싱 시작 ---");
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const result = {}; 
-    
-    // 1. 이미지에 보이는 가장 바깥쪽 컨테이너인 .staff-group을 찾습니다.
-    const staffGroups = doc.querySelectorAll('.staff-group');
-    console.log("발견된 직원 그룹 수:", staffGroups.length);
-
-    staffGroups.forEach((group, index) => {
-        // 2. 이름 추출: .staff-header 내의 b 태그에서 "정예은님" 추출
-        const headerB = group.querySelector('.staff-header b');
-        if (!headerB) return;
-        
-        const rawText = headerB.innerText.trim();
-        const staffName = normalizeName(rawText);
-        console.log(`[${index}] 파싱 중인 직원:`, staffName);
-
-        const categories = { "직원내수": 0, "가발": 0, "CL": 0, "재시술": 0, "명함": 0, "블로거ST": 0 };
-        
-        // 3. 테이블 탐색: 이미지상의 클래스명인 .summary-table을 찾습니다.
-        const summaryTable = group.querySelector('.summary-table');
-        
-        if (summaryTable) {
-            const ths = summaryTable.querySelectorAll('tr th');
-            const tds = summaryTable.querySelectorAll('tr td');
-            
-            ths.forEach((th, idx) => {
-                const key = th.innerText.trim();
-                const val = parseNumber(tds[idx]?.innerText);
-                
-                // 블로거ST 항목 처리 및 나머지 매칭
-                if (key === "블로거ST" || key === "블로거" || key === "ST") {
-                    categories["블로거ST"] += val;
-                } else if (categories.hasOwnProperty(key)) {
-                    categories[key] = val;
-                }
-            });
-            console.log(`   > ${staffName} 데이터 수집 완료:`, categories);
-        }
-        
-        result[staffName] = categories;
-    });
-    
-    console.log("--- 최종 파싱 결과:", result);
-    return result;
 };

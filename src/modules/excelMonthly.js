@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { ipcRenderer } from '../utils/ipc';
-import { parseNumber, parseInternalSalesData, normalizeName } from '../utils/parsers';
+import { parseNumber } from '../utils/parsers';
 
 const parseMonthlyData = (html) => {
     const parser = new DOMParser(); 
@@ -53,26 +53,6 @@ export const executeMonthlyExcel = async ({ dates, staffList, addLog, setLoading
         return; 
     }
 
-    // --- [수정] 405 에러를 피하기 위해 전용 핸들러 호출 ---
-    let internalSalesMap = {};
-    try {
-        addLog("🔍 외부 정산 웹페이지(calc) 접속 및 데이터 수집 중...");
-        
-        // ★ 여기서 scrap-data 대신 scrap-internal-sales를 호출해야 405 에러가 안 납니다!
-        const calcHtml = await ipcRenderer.invoke('scrap-internal-sales');
-        
-        if (calcHtml && calcHtml.length > 200) {
-            internalSalesMap = parseInternalSalesData(calcHtml);
-            const foundCount = Object.keys(internalSalesMap).length;
-            addLog(`✅ 외부 내역 로드 성공: ${foundCount}명 발견`);
-        } else {
-            addLog("⚠️ 외부 내역 페이지에서 데이터를 가져오지 못했습니다.");
-        }
-    } catch (e) {
-        addLog(`❌ 외부 내역 조회 중 오류: ${e.message}`);
-    }
-    // ----------------------------------------------------
-
     const targetUrl = 'https://www1.handsos.com/work/detail/report/report_account_Vat.asp';
 
     if (staffList.length === 0) { 
@@ -113,22 +93,7 @@ export const executeMonthlyExcel = async ({ dates, staffList, addLog, setLoading
                         }
                     });
                 }
-
-                // 2. 외부 정산값 매칭 및 기입 (E열 53~57행)
-                const normalizedStaffName = normalizeName(staff.name);
-                const staffExtraData = internalSalesMap[normalizedStaffName];
-
-                if (staffExtraData) {
-                    ws.getCell('E53').value = staffExtraData["직원내수"] || 0;
-                    ws.getCell('E54').value = (staffExtraData["CL"] || 0) + (staffExtraData["가발"] || 0);
-                    ws.getCell('E55').value = staffExtraData["재시술"] || 0;
-                    ws.getCell('E56').value = staffExtraData["명함"] || 0;
-                    ws.getCell('E57').value = staffExtraData["블로거ST"] || 0;
-                    addLog(`📊 [${staff.name}] 외부 정산값 기입 완료`);
-                } else {
-                    addLog(`❓ [${staff.name}] 외부 정산 데이터 없음 (이름 불일치 주의)`);
-                }
-            } else { 
+            } else {
                 addLog(`⚠️ [${staff.name}] 시트 없음`); 
             }
         } catch (innerError) { 

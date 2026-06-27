@@ -188,58 +188,6 @@ ipcMain.handle('get-naver-sales', async (event, { date }) => {
   } catch (e) { return { total: -1, detailList: [] }; }
 });
 
-// --- [3. 내수 데이터 정산 - 완전 자동이므로 show: false] ---
-// --- [3. 내수 데이터 정산 스크래핑 - 선택자 수정 버전] ---
-ipcMain.handle('scrap-internal-sales', async () => {
-  let calcWin = new BrowserWindow({
-    width: 1200, height: 900,
-    show: false, 
-    webPreferences: { nodeIntegration: false, contextIsolation: true, webSecurity: false }
-  });
-
-  await calcWin.loadURL('https://chahongroom-nowon.github.io/calc/');
-  
-  const analogScript = `
-    new Promise((resolve) => {
-      const checkBtn = setInterval(() => {
-          const tabs = Array.from(document.querySelectorAll('button'));
-          const historyBtn = tabs.find(b => b.innerText.includes('내역 보기'));
-          
-          if (historyBtn) {
-              clearInterval(checkBtn);
-              historyBtn.click();
-              
-              let dataCheckCount = 0;
-              const checkData = setInterval(() => {
-                  // [수정] 이미지 구조에 맞게 .staff-group과 .summary-table로 변경
-                  const groups = document.querySelectorAll('.staff-group');
-                  const tables = document.querySelectorAll('.summary-table');
-                  
-                  if (groups.length > 0 && tables.length > 0) {
-                      clearInterval(checkData);
-                      // 데이터 렌더링 안정을 위해 대기 후 HTML 반환
-                      setTimeout(() => resolve(document.documentElement.innerHTML), 1500);
-                  }
-                  if (dataCheckCount++ > 40) { 
-                      clearInterval(checkData); 
-                      resolve(document.documentElement.innerHTML); 
-                  }
-              }, 500);
-          }
-      }, 500);
-    });
-  `;
-  
-  try {
-    const html = await calcWin.webContents.executeJavaScript(analogScript);
-    setTimeout(() => { if(!calcWin.isDestroyed()) calcWin.destroy(); }, 2000);
-    return html;
-  } catch (e) {
-    if (!calcWin.isDestroyed()) calcWin.destroy();
-    return "";
-  }
-});
-
 // --- [유틸리티 핸들러] ---
 ipcMain.handle('get-template', async (event, fileName) => {
   const templatePath = app.isPackaged ? path.join(process.resourcesPath, fileName) : path.join(__dirname, `../public/${fileName}`);
