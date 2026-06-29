@@ -1,7 +1,7 @@
 {
   "name": "handsos-manager",
   "private": true,
-  "version": "6.2.8",
+  "version": "6.2.9",
   "description": "HandSOS Sales Manager",
   "main": "electron/main.js",
   "repository": {
