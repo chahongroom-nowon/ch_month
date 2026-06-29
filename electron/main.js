@@ -189,9 +189,40 @@ ipcMain.handle('get-naver-sales', async (event, { date }) => {
 });
 
 // --- [유틸리티 핸들러] ---
+// 한셀(Hancell) 등 일부 오피스 프로그램은 xl/*.xml, docProps/app.xml의 엘리먼트에
+// 네임스페이스 접두사(x:, ep:)를 붙여 저장하는데, ExcelJS 파서는 이를 인식하지 못해
+// "Cannot read properties of undefined (reading 'company')" 같은 오류로 로드에 실패한다.
+// 해당 파일들만 접두사를 제거해 표준 형식으로 맞춘다.
+async function sanitizeOoxmlPrefixes(buffer) {
+  const JSZip = require('jszip');
+  const targets = [
+    /^xl\/workbook\.xml$/,
+    /^xl\/worksheets\/sheet\d+\.xml$/,
+    /^xl\/sharedStrings\.xml$/,
+    /^xl\/styles\.xml$/,
+    /^docProps\/app\.xml$/,
+  ];
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    let changed = false;
+    for (const name of Object.keys(zip.files)) {
+      const file = zip.files[name];
+      if (file.dir || !targets.some((re) => re.test(name))) continue;
+      const content = await file.async('string');
+      const fixed = content.replace(/(<\/?)([A-Za-z0-9]+):/g, '$1');
+      if (fixed !== content) { zip.file(name, fixed); changed = true; }
+    }
+    if (!changed) return buffer;
+    return await zip.generateAsync({ type: 'nodebuffer' });
+  } catch (e) {
+    return buffer;
+  }
+}
+
 ipcMain.handle('get-template', async (event, fileName) => {
   const templatePath = app.isPackaged ? path.join(process.resourcesPath, fileName) : path.join(__dirname, `../public/${fileName}`);
-  return fs.readFileSync(templatePath);
+  const buffer = fs.readFileSync(templatePath);
+  return sanitizeOoxmlPrefixes(buffer);
 });
 
 ipcMain.handle('open-excel-direct', async (event, { buffer, fileName }) => {
