@@ -72,6 +72,7 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (mode === 'daily' && isNaverLoggedIn) fetchNaverSales(dates.start); }, [dates.start, mode]);
+  useEffect(() => { if (mode === 'daily' && isLoggedIn) handleFetchHandSos(true); }, [dates.start, mode]);
 
   const closeVerifyPanel = () => { setShowVerify(false); window.resizeTo(600, 800); };
   const handleReopenReport = () => { setShowVerify(true); window.resizeTo(1400, 900); };
@@ -136,8 +137,10 @@ export default function App() {
         const targetUrl = 'https://www1.handsos.com/work/detail/account_daily/account_Daily.asp';
         const html = await ipcRenderer.invoke('scrap-data', { targetUrl, strDateS: dates.start, strDateE: dates.end, strMode: 'd', pkStaff: '0', staffStatus: '' });
         const parsedData = parseHandSosData(html);
-        if(parsedData) setHandSosData(parsedData);
-        else addLog("❌ HAND 테이블 없음");
+        if(parsedData) {
+          setHandSosData(parsedData);
+          addLog(`✅ HAND ${dates.start} 조회 완료 (${parsedData.length}명)`);
+        } else addLog("❌ HAND 테이블 없음");
     } catch (e) { addLog(`❌ 오류: ${e.message}`); }
     setLoading(false);
   };
@@ -194,6 +197,11 @@ export default function App() {
   }, [mergedData]);
 
   const onHandSosLogin = async () => {
+      if (isLoggedIn) {
+          addLog(`🔄 HAND ${dates.start} 재조회 중...`);
+          await handleFetchHandSos(true);
+          return;
+      }
       const res = await ipcRenderer.invoke('open-login-window');
       if (res && (res.status === "SUCCESS" || res.status === "ALREADY_OPEN")) {
           setIsLoggedIn(true);

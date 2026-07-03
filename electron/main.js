@@ -3,6 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { patchXlsxSheet } = require('./xlsxPatch');
 
 let mainWindow;
 let loginWindow;
@@ -157,7 +158,10 @@ autoUpdater.on('update-downloaded', () => mainWindow.webContents.send('download-
 
 // --- [1. HandSOS 로그인 및 스크래핑] ---
 ipcMain.handle('open-login-window', async () => {
-  if (loginWindow && !loginWindow.isDestroyed()) { loginWindow.show(); return { status: "ALREADY_OPEN" }; }
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.show();
+    return { status: "ALREADY_OPEN" };
+  }
   
   // 사용자가 아이디/비번을 입력해야 하므로 로그인 시에는 창을 보여줍니다.
   loginWindow = new BrowserWindow({ width: 1200, height: 900, parent: mainWindow, show: true, title: 'HAND 로그인' });
@@ -357,9 +361,32 @@ ipcMain.handle('get-template', async (event, fileName) => {
   return sanitizeOoxmlPrefixes(buffer);
 });
 
+ipcMain.handle('build-daily-excel', async (event, { patches, fileName }) => {
+  const templatePath = app.isPackaged
+    ? path.join(process.resourcesPath, 'daily_template.xlsx')
+    : path.join(__dirname, '../public/daily_template.xlsx');
+
+  // 한셀(Cell) 원본 템플릿을 그대로 패치 (sanitize 하면 한셀/엑셀에서 빈 화면)
+  const rawBuffer = fs.readFileSync(templatePath);
+  const outBuffer = await patchXlsxSheet(rawBuffer, 'xl/worksheets/sheet1.xml', patches);
+
+  const filePath = path.join(os.tmpdir(), fileName);
+  fs.writeFileSync(filePath, outBuffer);
+  await shell.openPath(filePath);
+  return { success: true, filePath };
+});
+
+function toIpcBuffer(data) {
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data);
+  if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  if (data && data.type === 'Buffer' && Array.isArray(data.data)) return Buffer.from(data.data);
+  return Buffer.from(data);
+}
+
 ipcMain.handle('open-excel-direct', async (event, { buffer, fileName }) => {
   const filePath = path.join(os.tmpdir(), fileName);
-  fs.writeFileSync(filePath, Buffer.from(buffer));
+  fs.writeFileSync(filePath, toIpcBuffer(buffer));
   await shell.openPath(filePath);
 });
 
