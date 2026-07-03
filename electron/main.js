@@ -9,8 +9,103 @@ let loginWindow;
 let naverWindow;
 let currentNaverBizId = null;
 
+function extractNaverBizId(text) {
+  if (!text || typeof text !== 'string') return null;
+  const patterns = [
+    /\/businesses\/(\d+)(?:\?|$|\/)/,
+    /\/bizes\/(\d+)(?:\?|$|\/)/,
+    /[?&]bookingBusinessId=(\d+)/,
+    /"businessId"\s*:\s*"?(\d+)"?/,
+    /"bookingBusinessId"\s*:\s*"?(\d+)"?/,
+    /"bizId"\s*:\s*"?(\d+)"?/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+async function completeNaverLogin(detectedId, resolve) {
+  currentNaverBizId = detectedId;
+  try {
+    if (!naverWindow || naverWindow.isDestroyed()) return;
+    const script = `(async () => { try { const res = await fetch('https://partner.booking.naver.com/api/businesses/${detectedId}'); const data = await res.json(); return data.name; } catch (e) { return null; } })();`;
+    const storeName = await naverWindow.webContents.executeJavaScript(script);
+    naverWindow.hide();
+    resolve({ status: 'SUCCESS', storeName: storeName || '네이버 매장' });
+  } catch (e) {
+    resolve({ status: 'SUCCESS', storeName: '네이버 매장' });
+  }
+}
+
+function resolveNaverBizId() {
+  if (currentNaverBizId) return currentNaverBizId;
+  if (naverWindow && !naverWindow.isDestroyed()) {
+    const detectedId = extractNaverBizId(naverWindow.webContents.getURL());
+    if (detectedId) {
+      currentNaverBizId = detectedId;
+      return detectedId;
+    }
+  }
+  return null;
+}
+
+async function fetchNaverStoreName(bizId) {
+  if (!naverWindow || naverWindow.isDestroyed()) return '네이버 매장';
+  try {
+    const script = `(async () => { try { const res = await fetch('https://partner.booking.naver.com/api/businesses/${bizId}'); const data = await res.json(); return data.name; } catch (e) { return null; } })();`;
+    return (await naverWindow.webContents.executeJavaScript(script)) || '네이버 매장';
+  } catch (e) {
+    return '네이버 매장';
+  }
+}
+
+function parseNaverBookings(result) {
+  if (!result) return [];
+  if (Array.isArray(result)) return result;
+  return result.content || result.items || result.data || result.bookings || [];
+}
+
+function toggleDevTools() {
+  const win = BrowserWindow.getFocusedWindow();
+  const target = win && !win.isDestroyed() ? win : mainWindow;
+  if (target && !target.isDestroyed()) target.webContents.toggleDevTools();
+}
+
+function createAppMenu() {
+  const template = [
+    {
+      label: '보기',
+      submenu: [
+        {
+          label: '개발자 도구',
+          accelerator: 'F12',
+          click: toggleDevTools,
+        },
+        {
+          label: '개발자 도구 (Ctrl+Shift+I)',
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: toggleDevTools,
+        },
+        { type: 'separator' },
+        {
+          label: '새로고침',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow();
+            const target = win && !win.isDestroyed() ? win : mainWindow;
+            if (target && !target.isDestroyed()) target.webContents.reload();
+          },
+        },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
-  Menu.setApplicationMenu(null);
+  createAppMenu();
 
   mainWindow = new BrowserWindow({
     width: 600,
@@ -119,9 +214,16 @@ ipcMain.handle('scrap-data', async (event, payload) => {
 
 // --- [2. 네이버 로그인 및 매출 조회] ---
 ipcMain.handle('open-naver-login', async () => {
-  if (naverWindow && !naverWindow.isDestroyed()) { naverWindow.show(); return { status: "ALREADY_OPEN" }; }
+  if (naverWindow && !naverWindow.isDestroyed()) {
+    const detectedId = resolveNaverBizId();
+    if (detectedId) {
+      const storeName = await fetchNaverStoreName(detectedId);
+      return { status: 'SUCCESS', storeName };
+    }
+    naverWindow.show();
+    return { status: 'ALREADY_OPEN' };
+  }
   
-  // 네이버 로그인도 직접 입력이 필요하므로 창을 보여줍니다.
   naverWindow = new BrowserWindow({ 
       width: 1000, height: 800, parent: mainWindow, show: true, title: '네이버 로그인',
       webPreferences: { nodeIntegration: true, contextIsolation: false, webSecurity: false }
@@ -130,62 +232,92 @@ ipcMain.handle('open-naver-login', async () => {
   
   return new Promise((resolve) => {
       let foundId = false;
-      naverWindow.on('closed', () => { 
-          naverWindow = null; 
-          try { session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*.naver.com/*'] }, null); } catch(e){}
-          resolve({ status: "CLOSED" }); 
-      });
-      const filter = { urls: ['*://*.naver.com/*'] };
-      naverWindow.webContents.session.webRequest.onBeforeRequest(filter, (details, callback) => {
-          if (foundId) { callback({ cancel: false }); return; }
-          const match = details.url.match(/\/businesses\/(\d+)(\?|$)/);
-          if (match && match[1]) {
-              const detectedId = match[1];
-              foundId = true;
-              currentNaverBizId = detectedId;
-              setTimeout(async () => {
-                  try {
-                      if(!naverWindow || naverWindow.isDestroyed()) return;
-                      const script = `(async () => { try { const res = await fetch('https://partner.booking.naver.com/api/businesses/${detectedId}'); const data = await res.json(); return data.name; } catch (e) { return null; } })();`;
-                      const storeName = await naverWindow.webContents.executeJavaScript(script);
-                      naverWindow.hide(); // 연동 성공 시 창을 숨깁니다.
-                      resolve({ status: "SUCCESS", storeName: storeName || "네이버 매장" });
-                  } catch (e) { foundId = false; }
-              }, 200);
+      let urlPollInterval = null;
+      let naverRequestFilter = { urls: ['*://*.naver.com/*'] };
+
+      const tryDetectBizId = (source) => {
+          if (foundId) return;
+          const detectedId = extractNaverBizId(source);
+          if (!detectedId) return;
+          foundId = true;
+          if (urlPollInterval) clearInterval(urlPollInterval);
+          setTimeout(() => completeNaverLogin(detectedId, resolve), 200);
+      };
+
+      const onNaverRequest = (details, callback) => {
+          if (!foundId) {
+              tryDetectBizId(details.url);
+              if (!foundId && details.method === 'POST' && details.uploadData) {
+                  for (const chunk of details.uploadData) {
+                      if (chunk.bytes) {
+                          tryDetectBizId(Buffer.from(chunk.bytes).toString('utf8'));
+                          if (foundId) break;
+                      }
+                  }
+              }
           }
           callback({ cancel: false });
+      };
+
+      const onNavigate = (_event, url) => tryDetectBizId(url);
+
+      naverWindow.on('closed', () => { 
+          if (urlPollInterval) clearInterval(urlPollInterval);
+          try {
+              const winSession = naverWindow?.webContents?.session;
+              winSession?.webRequest?.onBeforeRequest(naverRequestFilter, null);
+          } catch (e) {}
+          naverWindow = null;
+          resolve({ status: "CLOSED" }); 
       });
+
+      naverWindow.webContents.on('did-navigate', onNavigate);
+      naverWindow.webContents.on('did-navigate-in-page', onNavigate);
+
+      naverWindow.webContents.session.webRequest.onBeforeRequest(naverRequestFilter, onNaverRequest);
+
+      urlPollInterval = setInterval(() => {
+          if (foundId || !naverWindow || naverWindow.isDestroyed()) return;
+          tryDetectBizId(naverWindow.webContents.getURL());
+      }, 1000);
   });
 });
 
 ipcMain.handle('get-naver-sales', async (event, { date }) => {
-  if (!currentNaverBizId) return { total: -1, detailList: [] };
-  
-  // 데이터 조회 시에는 창을 백그라운드(show: false)에서 생성하거나 유지합니다.
+  const bizId = resolveNaverBizId();
+  if (!bizId) return { total: -1, detailList: [], reason: 'NO_BIZ_ID' };
+
   if (!naverWindow || naverWindow.isDestroyed()) {
       naverWindow = new BrowserWindow({ width: 1000, height: 800, show: false, webPreferences: { nodeIntegration: true, contextIsolation: false, webSecurity: false } });
-      await naverWindow.loadURL(`https://partner.booking.naver.com/bizes/${currentNaverBizId}/booking-list-view`);
+      await naverWindow.loadURL(`https://partner.booking.naver.com/bizes/${bizId}/booking-list-view`);
       await new Promise(r => setTimeout(r, 2000));
-  } 
+  } else {
+      const currentUrl = naverWindow.webContents.getURL();
+      if (!currentUrl.includes(`/bizes/${bizId}`)) {
+          await naverWindow.loadURL(`https://partner.booking.naver.com/bizes/${bizId}/booking-list-view`);
+          await new Promise(r => setTimeout(r, 2000));
+      }
+  }
 
   const startTime = new Date(date + 'T00:00:00').toISOString();
   const endTime = new Date(date + 'T23:59:59').toISOString();
-  const apiUrl = `https://partner.booking.naver.com/api/businesses/${currentNaverBizId}/bookings?bizItemTypes=STANDARD&dateDropdownType=TODAY&dateFilter=USEDATE&startDateTime=${encodeURIComponent(startTime)}&endDateTime=${encodeURIComponent(endTime)}&maxDays=31&page=0&size=100`;
-  const script = `(async () => { const res = await fetch("${apiUrl}"); return await res.json(); })();`;
+  const apiUrl = `https://partner.booking.naver.com/api/businesses/${bizId}/bookings?bizItemTypes=STANDARD&dateDropdownType=TODAY&dateFilter=USEDATE&startDateTime=${encodeURIComponent(startTime)}&endDateTime=${encodeURIComponent(endTime)}&maxDays=31&page=0&size=100`;
+  const script = `(async () => { try { const res = await fetch("${apiUrl}"); if (!res.ok) return { __error: true, status: res.status }; return await res.json(); } catch (e) { return { __error: true, message: e.message }; } })();`;
   try {
     const result = await naverWindow.webContents.executeJavaScript(script);
+    if (result?.__error) return { total: -1, detailList: [], reason: 'API_ERROR', bizId };
+
+    const bookings = parseNaverBookings(result);
     let total = 0, detailList = [];
-    if (result && Array.isArray(result)) {
-      result.forEach(item => {
+    bookings.forEach(item => {
         const validPayments = item.payments ? item.payments.filter(p => p.status !== "CANCELED") : [];
         if (validPayments.length > 0) {
           const sum = validPayments.reduce((acc, p) => acc + (p.paidAmount || 0) - (p.refundedAmount || 0), 0);
           if (sum > 0) { total += sum; detailList.push({ name: item.name, visitor: item.visitorName || null, price: sum, designer: item.originalBizItemName || '-' }); }
         }
-      });
-    }
-    return { total, detailList };
-  } catch (e) { return { total: -1, detailList: [] }; }
+    });
+    return { total, detailList, bizId };
+  } catch (e) { return { total: -1, detailList: [], reason: 'FETCH_FAILED', bizId }; }
 });
 
 // --- [유틸리티 핸들러] ---

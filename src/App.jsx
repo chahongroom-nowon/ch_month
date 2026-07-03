@@ -104,9 +104,29 @@ export default function App() {
   const saveSelectedStaff = () => { const newStaffList = onlineStaffList.filter(s => selectedStaffCodes.has(s.code)); setStaffList(newStaffList); localStorage.setItem('staffList', JSON.stringify(newStaffList)); setShowStaffModal(false); addLog(`💾 직원 리스트 업데이트 완료 (${newStaffList.length}명)`); };
 
   const fetchNaverSales = async (date) => {
-    const res = await ipcRenderer.invoke('get-naver-sales', { date });
-    if (res.total === -1) { setNaverSales(null); setNaverDetails([]); setIsNaverLoggedIn(false); } 
-    else { setNaverSales(res.total); setNaverDetails(res.detailList); setIsNaverLoggedIn(true); if (!showVerify) { setShowVerify(true); window.resizeTo(1400, 900); } }
+    setLoading(true);
+    try {
+      const res = await ipcRenderer.invoke('get-naver-sales', { date });
+      if (res.total === -1) {
+        setNaverSales(null);
+        setNaverDetails([]);
+        if (res.reason === 'NO_BIZ_ID') {
+          setIsNaverLoggedIn(false);
+          addLog('❌ NPay 세션 만료. 다시 로그인해 주세요.');
+        } else {
+          addLog(`❌ NPay 매출 조회 실패 (${res.reason || 'unknown'})`);
+        }
+      } else {
+        setNaverSales(res.total);
+        setNaverDetails(res.detailList);
+        setIsNaverLoggedIn(true);
+        addLog(`✅ NPay ${date} 매출: ${res.total.toLocaleString()}원 (${res.detailList.length}건)`);
+        if (!showVerify) { setShowVerify(true); window.resizeTo(1400, 900); }
+      }
+    } catch (e) {
+      addLog(`❌ NPay 조회 오류: ${e.message}`);
+    }
+    setLoading(false);
   };
 
   const handleFetchHandSos = async (skipCheck = false) => {
@@ -184,6 +204,11 @@ export default function App() {
   };
 
   const onNaverLogin = async () => {
+      if (isNaverLoggedIn) {
+          addLog(`🔄 NPay ${dates.start} 재조회 중...`);
+          await fetchNaverSales(dates.start);
+          return;
+      }
       const res = await ipcRenderer.invoke('open-naver-login');
       if (res && (res.status === "SUCCESS" || res.status === "ALREADY_OPEN")) {
           setIsNaverLoggedIn(true);
